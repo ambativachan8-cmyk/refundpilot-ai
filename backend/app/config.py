@@ -1,0 +1,42 @@
+"""Central configuration for RefundPilot AI.
+
+All knobs live here. Nothing secret is hardcoded — the OpenAI key is read from
+the environment only, and the app runs in deterministic mode when it is absent.
+"""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load backend/.env if present (no-op if the file does not exist).
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BACKEND_DIR / ".env")
+
+# --- Paths -----------------------------------------------------------------
+APP_DIR = Path(__file__).resolve().parent
+DATA_DIR = APP_DIR / "data"
+POLICY_PATH = DATA_DIR / "refund_policy.md"
+DB_PATH = Path(os.getenv("REFUNDPILOT_DB", str(BACKEND_DIR / "refundpilot.db")))
+
+# --- LLM -------------------------------------------------------------------
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "").strip() or None
+
+# True when we have a key and can call a real LLM to phrase responses.
+LLM_ENABLED = bool(OPENAI_API_KEY)
+
+# --- Business rules (single source of truth for thresholds) ----------------
+STANDARD_WINDOW_DAYS = 30
+ELECTRONICS_WINDOW_DAYS = 15
+HIGH_VALUE_THRESHOLD = 25_000  # INR; orders above this need manual approval
+REFUND_ABUSE_THRESHOLD = 3  # more than this many refunds in 90d -> escalate
+
+# --- App -------------------------------------------------------------------
+APP_NAME = "RefundPilot AI"
+CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]

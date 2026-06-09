@@ -1,0 +1,19 @@
+# RefundPilot AI - backend dependencies
+fastapi
+uvicorn[standard]
+pydantic>=2
+python-dotenv
+loguru
+
+# Agent orchestration. If LangGraph fails to install on your Python version,
+# the app automatically falls back to a built-in sequential orchestrator
+# with the same node structure (see app/agent/graph.py).
+langgraph
+langchain-core
+
+# LLM (optional). The app runs fully without an API key in deterministic mode.
+openai
+
+# Testing
+pytest
+httpx
