@@ -87,6 +87,8 @@ def chat(req: ChatRequest) -> ChatResponse:
         customer_id=req.customer_id,
         message=req.message,
         order_id=req.order_id,
+        proof_attached=req.proof_attached,
+        proof_unavailable=req.proof_unavailable,
     )
     return ChatResponse(
         session_id=session_id,

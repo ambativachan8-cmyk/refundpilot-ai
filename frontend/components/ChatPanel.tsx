@@ -41,6 +41,7 @@ export function ChatPanel({
   const [tts, setTts] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage | null>(null);
+  const [proofState, setProofState] = useState<"attached" | "unavailable" | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,9 +52,14 @@ export function ChatPanel({
     setMessages([]);
     setSessionId(null);
     setStage(null);
+    setProofState(null);
   }
 
-  async function send(text: string, fresh = false) {
+  async function send(
+    text: string,
+    fresh = false,
+    proof?: { proof_attached?: boolean; proof_unavailable?: boolean },
+  ) {
     const msg = text.trim();
     if (!msg || loading) return;
     setInput("");
@@ -61,13 +67,16 @@ export function ChatPanel({
     if (fresh) {
       setSessionId(null);
       setStage(null);
+      setProofState(null);
       setMessages([{ role: "customer", text: msg }]);
     } else {
       setMessages((m) => [...m, { role: "customer", text: msg }]);
     }
+    if (proof?.proof_attached) setProofState("attached");
+    if (proof?.proof_unavailable) setProofState("unavailable");
     setLoading(true);
     try {
-      const r = await api.chat(customerId, msg, useSession);
+      const r = await api.chat(customerId, msg, useSession, proof);
       setSessionId(r.session_id);
       setStage(r.stage);
       setMessages((m) => [...m, { role: "agent", text: r.response, decision: r.decision }]);
@@ -158,6 +167,52 @@ export function ChatPanel({
           </div>
         )}
       </div>
+
+      {/* proof workflow (shown when the agent is verifying a defect claim) */}
+      {(stage === "waiting_for_proof" || stage === "under_manual_review") && (
+        <div className="border-t border-white/10 bg-amber-500/[0.04] px-4 py-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() =>
+                send("I have attached photo/video proof of the issue.", false, {
+                  proof_attached: true,
+                })
+              }
+              disabled={loading}
+              className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-500/20 disabled:opacity-40"
+            >
+              📎 Attach photo/video proof
+            </button>
+            <button
+              onClick={() =>
+                send(
+                  "The issue is internal/software-related and cannot be shown clearly in a photo.",
+                  false,
+                  { proof_unavailable: true },
+                )
+              }
+              disabled={loading}
+              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 transition hover:bg-amber-500/20 disabled:opacity-40"
+            >
+              🚫 I can&apos;t show this in a photo
+            </button>
+            {proofState === "attached" && (
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                Proof attached
+              </span>
+            )}
+            {proofState === "unavailable" && (
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+                Proof unavailable — manual review
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-500">
+            For this demo, proof attachment is simulated. In production this would
+            connect to a secure file-upload service.
+          </p>
+        </div>
+      )}
 
       {/* input */}
       <div className="border-t border-white/10 px-4 py-3">

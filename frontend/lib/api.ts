@@ -28,11 +28,19 @@ export const api = {
     customer_id: string,
     message: string,
     session_id?: string | null,
+    proof?: { proof_attached?: boolean; proof_unavailable?: boolean },
   ): Promise<ChatResponse> {
     const res = await fetch(`${API_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customer_id, message, session_id: session_id ?? null }),
+      body: JSON.stringify({
+        customer_id,
+        message,
+        session_id: session_id ?? null,
+        proof_attached: proof?.proof_attached ?? false,
+        proof_unavailable: proof?.proof_unavailable ?? false,
+        attachment_type: proof?.proof_attached ? "simulated" : "none",
+      }),
     });
     if (!res.ok) throw new Error(`chat -> ${res.status}`);
     return res.json() as Promise<ChatResponse>;

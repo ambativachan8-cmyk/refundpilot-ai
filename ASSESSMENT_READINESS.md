@@ -22,6 +22,13 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
   `load_session_state` and `evaluate_conversation_state` remember defect claims,
   proof requests, and the order across turns. Defect-no-proof claims cannot be
   approved by a later "clean" message.
+- ✅ **Simulated proof workflow** — chat shows "Attach proof" / "I can't show this
+  in a photo" buttons during `waiting_for_proof`; backend accepts
+  `proof_attached`/`proof_unavailable`. Proof never auto-approves a defect (goes to
+  manual review); anti-loop stops repeated proof requests. Only explicit signals
+  count — a bare "photo" mention does not.
+- ✅ **Scenario QA harness** — `scripts/manual_qa_matrix.py` (readable table) +
+  `tests/test_support_workflow_matrix.py` (~15 flows as assertions).
 - ✅ Failures / warnings / ambiguous cases visible (missing order → `handle_error`
   failed log; ambiguous order → warning; defect-no-proof → warning).
 
@@ -73,7 +80,8 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
 | 17 | **Defect → "I cannot provide proof" (same session)** | **not approved** | `test_agent` |
 | 18 | **Clarify ("return my product") → then "unused, 5 days"** | escalated → approved | `test_agent` |
 
-**Verification:** `pytest` → 43 passed · `npx tsc --noEmit` clean · `npm run build`
-clean · live multi-turn HTTP smoke confirms the defect/no-proof follow-up stays
-`under_manual_review` (not approved), clean return approves, clarify-then-approve
-works, and CUST-002 is denied.
+**Verification:** `pytest` → 59 passed · `manual_qa_matrix.py` → 18/18 checks pass ·
+`npx tsc --noEmit` clean · `npm run build` clean · live HTTP smoke confirms the
+proof-attached and proof-unavailable buttons both route to `under_manual_review`
+(never auto-approved), clean return approves, clarify-then-approve works, and
+CUST-002 is denied.

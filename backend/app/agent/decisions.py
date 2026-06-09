@@ -48,6 +48,7 @@ def template_response(
     intent: dict[str, Any] | None = None,
     stage: str | None = None,
     pending: str | None = None,
+    proof_received: bool = False,
 ) -> str:
     name = customer.get("name", "there").split(" ")[0]
     product = order.get("product_name", "your item")
@@ -60,15 +61,22 @@ def template_response(
     if stage == "waiting_for_proof":
         return (
             f"Hi {name}, I can't approve a refund for the {product} yet because it's "
-            "reported as not working, and a defect claim needs verification. Could you "
-            "upload a photo or short video showing the issue? Our support team will "
-            "review it and follow up."
+            "reported as not working, and a defect claim needs verification. Please "
+            "attach a photo or short video using the proof buttons below — or choose "
+            "“I can't show this in a photo” if the issue is internal (e.g. "
+            "software or bluetooth) and we'll route it to manual review."
+        )
+    if stage == "under_manual_review" and proof_received:
+        return (
+            f"Hi {name}, thanks — I've received your proof for the {product}. I can't "
+            "auto-approve a defect refund, so I'm escalating this to manual review and "
+            "our support team will validate the issue and follow up."
         )
     if stage == "under_manual_review":
         return (
             f"Hi {name}, I understand the issue with the {product} may not be visible "
-            "in a photo. I still can't approve an immediate refund without verification, "
-            "so I've escalated this to manual review / warranty support — the team will "
+            "in a photo. I can't approve an immediate refund without verification, so "
+            "I'm moving this to manual review / warranty support — the team will "
             "validate the issue and get back to you."
         )
     if stage == "needs_clarification":
@@ -194,7 +202,8 @@ def generate_response(
     intent: dict[str, Any] | None = None,
     stage: str | None = None,
     pending: str | None = None,
+    proof_received: bool = False,
 ) -> tuple[str, str]:
     """Return (customer_response, llm_mode)."""
-    base = template_response(decision, customer, order, intent, stage, pending)
+    base = template_response(decision, customer, order, intent, stage, pending, proof_received)
     return _maybe_llm_rephrase(base, decision, customer, order, checks, message)

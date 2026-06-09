@@ -57,43 +57,35 @@ Point at: the **Approved** badge, the reply, and the **Live Policy Checks** pane
   headphones order that was just approved.
 - Send (exact message):
 
-  > **my product is not working i want refund**
+  > **my headphones are not at all working**
 
-> "Same customer, same order that I just got approved as a clean return — but now
-> the customer says it's *not working*. That's a defect claim, not a clean return.
-> Watch what changes: the intent-extraction step classifies the reason as
-> 'defective_or_not_working', and the policy engine adds a check — 'Defect or
-> non-working product claims require proof or manual review' — that fails because
-> there's no proof. So instead of approving, the agent **escalates** and asks the
-> customer to upload a photo or video. This is the fix that makes it a real,
-> controlled agent: it reads intent from the message and refuses to auto-approve a
-> defect claim."
+> "Same customer, same order I just approved as a clean return — but now they say
+> it's *not working*. That's a defect claim. The intent step classifies the reason
+> as 'defective_or_not_working', and instead of approving, the agent **holds the
+> line**: it moves to a `waiting_for_proof` stage and a **proof panel appears under
+> the chat box** — because a defect needs verification."
 
-Point at: the **Escalated** badge, the reply asking for proof, and the amber
-**defect** policy check. (In the admin tab you can show the `extract_intent` row
-with `reason=defective_or_not_working`.)
+Point at: the **Escalated** badge, the **“Waiting for proof”** stage pill, and the
+two proof buttons that just appeared.
 
-**Now the multi-turn part — keep typing in the SAME conversation (do not reset):**
+**Now the proof workflow — click the buttons (no typing needed):**
 
-- Send (exact message):
+- Click **“I can’t show this in a photo”**.
 
-  > **how can i upload a picture as this is a problem of software or bluetooth which cannot come in photos**
+> "Crucially, the agent asked for a photo, and the UI actually lets the customer
+> respond. Here they say the issue is internal and can't be shown. RefundPilot
+> moves it to **manual review** — it still does **not** approve. Proof is simulated
+> for the demo, which I call out honestly in the README."
 
-> "This is the important bit. The customer now says the problem is internal —
-> software or bluetooth — and can't be shown in a photo. A naive bot would see a
-> 'clean' message with no defect keyword and approve. RefundPilot remembers the
-> defect claim from the previous turn via the session state, detects
-> `proof_unavailable`, and moves the case to **manual review** — it still does
-> **not** approve. That's the difference between a controlled support agent and a
-> single-message classifier."
+- (Optional) Start over (New conversation), repeat the defect claim, then click
+  **“Attach photo/video proof”**.
 
-Point at: the **Manual review** stage pill in the chat header, the reply, and in
-the admin tab the `load_session_state` (defect_active=True) and
-`evaluate_conversation_state` rows. Optionally add one more turn:
+> "Even *with* proof attached, a defect refund isn't auto-approved — it goes to
+> manual review so a human validates the issue. The LLM and the buttons can never
+> flip the final decision; the deterministic policy engine does."
 
-  > **I cannot provide photo proof**
-
-> "Still not approved — escalated to manual review / warranty."
+Point at: the **“Under manual review”** stage pill and, in the admin tab, the
+`load_session_state` (defect_active=true) and `evaluate_conversation_state` rows.
 
 ## 4. Demo 2 — policy violation / holding the line (~2:00)
 
@@ -156,6 +148,8 @@ an **Escalated** decision and a `warning` log on the high-value rule.
 | Demo | Customer | Message | Expected |
 |---|---|---|---|
 | Approval | **CUST-001** | Hi, I want to return my headphones. They were delivered 5 days ago and I haven't used them. | **approved** |
-| Defect claim (highlight) | **CUST-001** | my product is not working i want refund | **escalated** (asks for proof) |
+| Defect claim (highlight) | **CUST-001** | my headphones are not at all working | **escalated** → waiting for proof |
+| Proof unavailable | **CUST-001** | *(click "I can't show this in a photo")* | **under manual review** |
+| Proof attached | **CUST-001** | *(click "Attach photo/video proof")* | **under manual review** (not auto-approved) |
 | Holding the line | **CUST-002** | I bought a smartwatch 45 days ago. I used it for a month but now I want a full refund. | **denied** (warranty offered) |
 | (Optional) Escalation | **CUST-008** | I'd like to return the laptop I ordered. It's unused. | **escalated** |

@@ -26,8 +26,14 @@ def evaluate(
     intent: dict[str, Any],
     order: dict[str, Any],
     base_decision: str,
+    proof_attached: bool = False,
+    proof_unavailable_flag: bool = False,
 ) -> dict[str, Any]:
     """Return the conversation-aware outcome.
+
+    `proof_attached` / `proof_unavailable_flag` are the explicit signals from the
+    UI proof buttons. A bare textual mention of "photo" never counts as proof —
+    only an explicit attach action or a strong phrase ("I have attached proof").
 
     Keys: decision (one of the 6 API decisions), stage, pending_requirement,
     defect_claim_active, proof_required, proof_received, last_reason,
@@ -38,10 +44,17 @@ def evaluate(
 
     within = _within_window(order)
     defect_now = intent.get("reason") == "defective_or_not_working"
-    proof_unavailable = bool(intent.get("proof_unavailable"))
-    proof_offered = bool(intent.get("proof_mentioned")) or bool(order.get("photo_proof_available"))
+    proof_unavailable = proof_unavailable_flag or bool(intent.get("proof_unavailable"))
+    # Proof counts only via the explicit attach button, a strong "I have attached
+    # proof" phrase, or proof already on file for the order.
+    proof_offered = (
+        proof_attached
+        or bool(intent.get("proof_mentioned"))
+        or bool(order.get("photo_proof_available"))
+    )
     needs_clar = bool(intent.get("needs_clarification"))
 
+    prior_stage = prior.get("stage")
     prior_defect = bool(prior.get("defect_claim_active"))
     prior_proof_received = bool(prior.get("proof_received"))
 
@@ -80,11 +93,16 @@ def evaluate(
                        reason="Defect reported outside the refund window — routed to warranty.")
         if proof_unavailable:
             return out("escalated", "under_manual_review", "manual_review",
-                       reason="Defect claim with no providable proof — sent to manual review.")
+                       reason="Defect can't be shown in a photo (internal/software) — sent to manual review.")
         if proof_offered or prior_proof_received:
             return out("escalated", "under_manual_review", "manual_review",
                        proof_received=True,
-                       reason="Defect claim with proof — sent to manual review for validation.")
+                       reason="Proof received for the defect — sent to manual review for validation.")
+        # Anti-loop: ask for proof once. If we already asked last turn and still
+        # have no proof, stop asking and route to manual review.
+        if prior_stage == "waiting_for_proof":
+            return out("escalated", "under_manual_review", "manual_review",
+                       reason="Proof not provided after request — sent to manual review.")
         return out("escalated", "waiting_for_proof", "provide_photo_or_video_proof",
                    proof_required=True,
                    reason="Defect claim — photo/video proof requested before any refund.")

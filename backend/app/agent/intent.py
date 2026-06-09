@@ -75,7 +75,14 @@ _USED = re.compile(
 )
 _LATE = re.compile(r"\b(late\s+delivery|delivered\s+late|too\s+late|delayed)\b", re.IGNORECASE)
 _WRONG = re.compile(r"\b(wrong\s+item|different\s+(item|product)|not\s+what\s+i\s+ordered)\b", re.IGNORECASE)
-_PROOF = re.compile(r"\b(photo|picture|pic|image|video|proof|attach(ed|ment)?|uploaded|screenshot)\b", re.IGNORECASE)
+# Strong "I have actually provided proof" phrases — a bare mention of "photo" does
+# NOT count. Proof only counts via an explicit attach action or a clear statement.
+_PROOF = re.compile(
+    r"(attach(ed|ing)?|uploaded|shar(ed|ing)|sent|sending|here\s+(is|are)|i\s+have)\s+"
+    r"(a\s+|the\s+|my\s+|some\s+)?(photo|picture|pic|image|video|proof|screenshot)s?"
+    r"|proof\s+(is\s+)?(attached|provided|added)|i\s+have\s+proof",
+    re.IGNORECASE,
+)
 _REFUND = re.compile(r"\b(refund|return|money\s+back|reimburse)\b", re.IGNORECASE)
 _ANGRY = re.compile(r"\b(angry|furious|ridiculous|terrible|worst|unacceptable|fed\s+up)\b", re.IGNORECASE)
 _FRUSTRATED = re.compile(r"\b(frustrated|annoyed|disappointed|not\s+happy|still\s+waiting)\b", re.IGNORECASE)
@@ -96,7 +103,9 @@ def fallback_extract(message: str) -> dict[str, Any]:
 
     order_match = _ORDER_ID.search(msg)
     order_id = order_match.group(0).upper() if order_match else None
-    proof_unavailable = bool(_PROOF_UNAVAILABLE.search(msg))
+    # Internal / software / bluetooth issues cannot be shown in a photo, so treat
+    # them as "proof unavailable" rather than asking for an impossible photo.
+    proof_unavailable = bool(_PROOF_UNAVAILABLE.search(msg)) or bool(_INTERNAL.search(msg))
     # "proof mentioned" means proof is actually offered — not when they say they can't.
     proof = bool(_PROOF.search(msg)) and not proof_unavailable
 

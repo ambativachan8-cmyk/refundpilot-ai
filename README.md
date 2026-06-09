@@ -221,8 +221,16 @@ App at http://localhost:3000 (chat) and http://localhost:3000/admin (logs).
 
 ```bash
 cd backend
-pytest                 # 43 tests: policy, intent, multi-turn conversation, end-to-end agent
+pytest                 # 59 tests: policy, intent, multi-turn conversation, scenario matrix
 ```
+
+**Scenario QA matrix** — a readable pass/fail sweep of ~15 realistic conversations
+(clean return, defect+proof, defect+no-proof, manipulation, policy violations…):
+```bash
+cd backend
+.venv\Scripts\python.exe scripts\manual_qa_matrix.py    # prints a PASS/FAIL table
+```
+The same scenarios run as assertions in `tests/test_support_workflow_matrix.py`.
 
 Frontend checks:
 ```bash
@@ -306,6 +314,24 @@ Stages: `new_request`, `needs_clarification`, `waiting_for_proof`,
 `under_manual_review`, `warranty_support`, plus the terminal decisions. The API
 still returns one of the six `decision` values; `stage` carries the nuance.
 
+### Proof workflow (simulated)
+
+When a defect claim is in `waiting_for_proof`, the chat UI shows two buttons —
+**“Attach photo/video proof”** and **“I can’t show this in a photo”** — which send
+`proof_attached` / `proof_unavailable` on the next `/chat` call:
+
+- **Proof attached** → `proof_received=true` → `under_manual_review` (a defect is
+  never auto-approved even with proof; a human validates it).
+- **Proof unavailable** (or an internal/software/bluetooth issue that can’t be
+  photographed) → `under_manual_review` / warranty support.
+- **Anti-loop:** the agent asks for proof *once*; if none arrives the next turn, it
+  stops asking and routes to manual review.
+
+Only an explicit button press or a strong phrase (“I have attached proof”) counts —
+a bare mention of the word “photo” never does, so the agent can’t be talked into
+believing proof exists. Proof storage is **simulated** for this prototype (see
+*Known limitations*).
+
 ### Why the LLM cannot override policy
 
 The LLM can **interpret** the customer's language and **draft** the reply, but the
@@ -318,6 +344,15 @@ never refunded, and so on. This is why the agent is *controlled*, not a chatbot 
 and it's verifiable by running with no API key at all (identical decisions).
 
 ---
+
+## Known prototype limitations
+
+- **Proof upload is simulated.** The "Attach proof" button sends a flag
+  (`proof_attached`), not a real file. Production would wire this to a secure
+  file-upload/storage service and a human review queue; the agent logic and stages
+  would stay the same.
+- No authentication / multi-tenant CRM (single-store demo); SQLite, not Postgres.
+- LLM intent extraction is optional — see §16. The demo runs fully without a key.
 
 ## 17. Future improvements
 

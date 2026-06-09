@@ -134,6 +134,11 @@ class ChatRequest(BaseModel):
     message: str = Field(..., examples=["I want to return my headphones, delivered 5 days ago, unused."])
     order_id: Optional[str] = None  # optional explicit order selection
     session_id: Optional[str] = None  # reuse to continue a conversation
+    # Simulated proof workflow (the UI exposes these via buttons, not a real upload).
+    proof_attached: bool = False
+    proof_unavailable: bool = False
+    attachment_type: Literal["photo", "video", "none", "simulated"] = "none"
+    attachment_note: Optional[str] = None
 
 
 class ChatResponse(BaseModel):

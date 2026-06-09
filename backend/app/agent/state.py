@@ -9,6 +9,8 @@ class AgentState(TypedDict, total=False):
     user_message: str
     selected_customer_id: str
     detected_order_id: Optional[str]
+    req_proof_attached: bool
+    req_proof_unavailable: bool
     intent: Optional[dict[str, Any]]
     intent_method: str
     prior_session: Optional[dict[str, Any]]

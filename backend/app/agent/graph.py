@@ -74,6 +74,15 @@ def node_load_session(state: AgentState) -> dict[str, Any]:
 def node_extract_intent(state: AgentState) -> dict[str, Any]:
     message = state.get("user_message", "")
     intent, method, note = tools.extract_intent(message)
+    # Explicit proof buttons from the UI override/augment text-derived signals.
+    if state.get("req_proof_attached"):
+        intent["proof_mentioned"] = True
+        intent["proof_unavailable"] = False
+        note = f"{note}; proof_attached(button)"
+    if state.get("req_proof_unavailable"):
+        intent["proof_unavailable"] = True
+        intent["proof_mentioned"] = False
+        note = f"{note}; proof_unavailable(button)"
     status = "warning" if intent.get("needs_clarification") else "success"
     summary = (
         f"type={intent.get('intent_type')} reason={intent.get('reason')} "
@@ -179,6 +188,8 @@ def node_evaluate_state(state: AgentState) -> dict[str, Any]:
     conv = conversation.evaluate(
         state.get("prior_session"), state.get("intent") or {},
         state["order"], base,
+        proof_attached=bool(state.get("req_proof_attached")),
+        proof_unavailable_flag=bool(state.get("req_proof_unavailable")),
     )
     changed = " (overridden by conversation state)" if conv["decision"] != base else ""
     upd = _log(state, "evaluate_conversation_state", "evaluate_conversation_state",
@@ -197,10 +208,12 @@ def node_evaluate_state(state: AgentState) -> dict[str, Any]:
 
 def node_generate_response(state: AgentState) -> dict[str, Any]:
     decision = state.get("decision", "escalated")
+    proof_received = bool((state.get("conv") or {}).get("proof_received"))
     response, mode = decisions.generate_response(
         decision, state["customer"], state["order"],
         state.get("policy_checks", []), state.get("user_message", ""),
         state.get("intent"), state.get("stage"), state.get("pending_requirement"),
+        proof_received,
     )
     upd = _log(state, "generate_response", "generate_response",
                f"mode={mode}", f"Generated {len(response)}-char reply",
@@ -348,12 +361,16 @@ def run_agent(
     customer_id: str,
     message: str,
     order_id: str | None = None,
+    proof_attached: bool = False,
+    proof_unavailable: bool = False,
 ) -> AgentState:
     state: AgentState = {
         "session_id": session_id,
         "user_message": message,
         "selected_customer_id": customer_id,
         "detected_order_id": order_id,
+        "req_proof_attached": proof_attached,
+        "req_proof_unavailable": proof_unavailable,
         "intent": None,
         "intent_method": "fallback",
         "prior_session": None,
