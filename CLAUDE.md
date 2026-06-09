@@ -63,12 +63,18 @@ Live smoke: start backend, then `GET /health`, `GET /customers`,
    for every refund decision. The LLM only NARRATES the final reply — it must
    never change, soften, or override the decision.** Do not move decision logic
    into the LLM or prompts.
-2. **Never commit secrets.** `OPENAI_API_KEY` comes from the environment only.
+2. **Multi-turn memory matters.** The agent is not a single-message classifier.
+   `support_sessions` (SQLite) + `load_session_state`/`evaluate_conversation_state`
+   remember defect claims, proof requests, and the order across turns. **Once a
+   defect claim is active and proof isn't verified, never approve** — even if a
+   later message looks clean. The frontend keeps a stable `session_id` per
+   conversation (resets on customer change / demo / "New conversation").
+3. **Never commit secrets.** `OPENAI_API_KEY` comes from the environment only.
    `.env` is gitignored; only `.env.example` is committed. The DB (`*.db`) and
    `.venv` / `node_modules` are gitignored.
-3. Keep the audit trail intact — every tool call and policy check must log to the
-   admin reasoning trail (`save_reasoning_log`).
-4. Voice is an optional bonus (browser Web Speech API) and must degrade
+4. Keep the audit trail intact — every tool call, policy check, and state
+   transition must log to the admin reasoning trail (`save_reasoning_log`).
+5. Voice is an optional bonus (browser Web Speech API) and must degrade
    gracefully; do not make core flows depend on it.
-5. This is a one-night assessment MVP: prefer stability and demo confidence over
-   new features. Do not redesign the UI or rewrite the agent architecture.
+6. This is an assessment MVP: prefer stability and demo confidence over new
+   features. Do not redesign the UI or rewrite the agent architecture.

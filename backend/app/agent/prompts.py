@@ -43,16 +43,20 @@ INTENT_SYSTEM_PROMPT = (
     '"damaged_on_arrival", "changed_mind", "late_delivery", "wrong_item", '
     '"missing_package", "final_sale_dispute", "duplicate_refund", "unknown"\n'
     '  product_condition_claimed: one of "unused", "used", "damaged", "defective", "unknown"\n'
-    "  proof_mentioned: boolean (did they mention having a photo/video/proof?)\n"
+    "  proof_mentioned: boolean (did they mention having/attaching a photo/video/proof?)\n"
+    "  proof_unavailable: boolean (do they say they CANNOT provide proof, e.g. the "
+    "issue is internal/software/bluetooth, not visible, or they can't upload a photo?)\n"
     "  order_id_mentioned: string like \"ORD-1001\" or null\n"
     '  urgency_or_sentiment: one of "calm", "frustrated", "angry", "unknown"\n'
     "  needs_clarification: boolean (true if the message is too vague to act on)\n"
     "  clarification_question: a short question string, or null\n"
     "  confidence: number 0..1\n"
     "  evidence_phrases: array of short quotes from the message\n\n"
-    "Important: 'not working', 'defective', 'broken', 'stopped working' => "
-    'reason "defective_or_not_working". Only use "clean_return" when the customer '
-    "clearly says the item is unused/unopened."
+    "Important: 'not working', 'defective', 'broken', 'stopped working', and "
+    "internal issues like 'software'/'bluetooth'/'internal' problems => reason "
+    '"defective_or_not_working". Only use "clean_return" when the customer clearly '
+    "says the item is unused/unopened. If they say the problem can't be shown in a "
+    "photo or they can't provide proof, set proof_unavailable true."
 )
 
 INTENT_USER_TEMPLATE = 'Customer message: "{message}"\n\nReturn the JSON object now.'

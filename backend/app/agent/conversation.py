@@ -1,0 +1,110 @@
+"""Multi-turn conversation state machine.
+
+Runs AFTER the deterministic single-message policy decision. Its job is to make
+the agent behave like a real support workflow across turns — most importantly:
+
+    Once a defect / "not working" claim is active in a session and proof has not
+    been verified, the agent can NEVER auto-approve a refund — even if a later
+    message looks like a clean return.
+
+This layer can only make an outcome *stricter* (or hold it), never looser. The
+deterministic policy engine remains the source of truth; this adds memory.
+"""
+from __future__ import annotations
+
+from typing import Any, Optional
+
+from ..policy import window_days_for
+
+
+def _within_window(order: dict[str, Any]) -> bool:
+    return order.get("delivered_days_ago", 0) <= window_days_for(order)
+
+
+def evaluate(
+    prior: Optional[dict[str, Any]],
+    intent: dict[str, Any],
+    order: dict[str, Any],
+    base_decision: str,
+) -> dict[str, Any]:
+    """Return the conversation-aware outcome.
+
+    Keys: decision (one of the 6 API decisions), stage, pending_requirement,
+    defect_claim_active, proof_required, proof_received, last_reason,
+    clarification_question.
+    """
+    prior = prior or {}
+    intent = intent or {}
+
+    within = _within_window(order)
+    defect_now = intent.get("reason") == "defective_or_not_working"
+    proof_unavailable = bool(intent.get("proof_unavailable"))
+    proof_offered = bool(intent.get("proof_mentioned")) or bool(order.get("photo_proof_available"))
+    needs_clar = bool(intent.get("needs_clarification"))
+
+    prior_defect = bool(prior.get("defect_claim_active"))
+    prior_proof_received = bool(prior.get("proof_received"))
+
+    # A defect claim is "active" if it was raised this turn, earlier in the
+    # session, or the policy engine routed to warranty (out-of-window defect).
+    # Damaged-on-arrival (handled by the policy engine with photo proof) is NOT
+    # treated as a defect claim, so those can still approve.
+    defect_active = prior_defect or defect_now or base_decision == "warranty_support"
+
+    def out(decision, stage, pending, *, proof_required=False,
+            proof_received=False, reason="", clar=None):
+        return {
+            "decision": decision,
+            "stage": stage,
+            "pending_requirement": pending,
+            "defect_claim_active": defect_active,
+            "proof_required": bool(prior.get("proof_required")) or proof_required,
+            "proof_received": prior_proof_received or proof_received,
+            "last_reason": reason,
+            "clarification_question": clar,
+        }
+
+    # 1) Terminal policy outcomes the conversation layer must not loosen.
+    if base_decision == "denied":
+        return out("denied", "denied", "none", reason="Policy violation — refund denied.")
+    if base_decision == "store_credit":
+        return out("store_credit", "store_credit", "none", reason="Gift order — store credit.")
+    if base_decision == "already_cancelled":
+        return out("already_cancelled", "already_cancelled", "none",
+                   reason="Order already cancelled.")
+
+    # 2) Defect / not-working claim — never auto-approve.
+    if defect_active:
+        if not within:
+            return out("warranty_support", "warranty_support", "none",
+                       reason="Defect reported outside the refund window — routed to warranty.")
+        if proof_unavailable:
+            return out("escalated", "under_manual_review", "manual_review",
+                       reason="Defect claim with no providable proof — sent to manual review.")
+        if proof_offered or prior_proof_received:
+            return out("escalated", "under_manual_review", "manual_review",
+                       proof_received=True,
+                       reason="Defect claim with proof — sent to manual review for validation.")
+        return out("escalated", "waiting_for_proof", "provide_photo_or_video_proof",
+                   proof_required=True,
+                   reason="Defect claim — photo/video proof requested before any refund.")
+
+    # 3) Non-defect escalations / warranty from the policy engine.
+    if base_decision == "warranty_support":
+        return out("warranty_support", "warranty_support", "none",
+                   reason="Outside refund window — routed to warranty support.")
+    if base_decision == "escalated":
+        if needs_clar:
+            return out("escalated", "needs_clarification", "clarify_condition",
+                       reason="Request is ambiguous — asked the customer to clarify.",
+                       clar=intent.get("clarification_question"))
+        return out("escalated", "escalated", "manual_review",
+                   reason="Requires manual review (high-value / abuse / missing / international).")
+
+    # 4) Clean, eligible return (incl. clarify-then-approve).
+    if base_decision == "approved":
+        return out("approved", "approved", "none", reason="Eligible return — refund approved.")
+
+    # 5) Safety net: never silently approve.
+    return out("escalated", "under_manual_review", "manual_review",
+               reason="Unresolved case — sent to manual review.")

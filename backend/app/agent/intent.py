@@ -35,6 +35,26 @@ _DAMAGED_ARRIVAL = re.compile(
     r"damaged\s+on\s+arrival|broken\s+on\s+arrival|box\s+was\s+(crushed|damaged))\b",
     re.IGNORECASE,
 )
+# "not (properly) working", "isn't working", "doesn't work", "stopped working"...
+_NOT_WORKING = re.compile(
+    r"(not|isn'?t|aren'?t|does\s*n'?t|do\s*n'?t|won'?t|stopped?)\s+(\w+\s+){0,3}work\w*",
+    re.IGNORECASE,
+)
+# Internal / non-visible defect language (software, bluetooth, internals...).
+_INTERNAL = re.compile(
+    r"\b(software|bluetooth|firmware|internal|internals|connectivity|pairing|"
+    r"wi-?fi|app\s+issue)\b",
+    re.IGNORECASE,
+)
+# Customer says they CANNOT provide proof.
+_PROOF_UNAVAILABLE = re.compile(
+    r"(can'?t|cannot|can\s+not|unable\s+to|how\s+(can|do)\s+i)\s+"
+    r"(upload|show|provide|share|send|capture|take\s+a?\s*(photo|picture|video))"
+    r"|cannot\s+come\s+in\s+photos?|can'?t\s+be\s+(shown|seen|photographed)"
+    r"|not\s+visible|no\s+visible\s+(damage|defect)|nothing\s+to\s+show"
+    r"|no\s+proof|don'?t\s+have\s+(a\s+)?(photo|picture|proof|video)",
+    re.IGNORECASE,
+)
 # Generic broken/damaged (defect-ish) used as a fallback signal.
 _BROKEN = re.compile(r"\b(broken|damaged|cracked|shattered)\b", re.IGNORECASE)
 _MISSING = re.compile(
@@ -76,7 +96,9 @@ def fallback_extract(message: str) -> dict[str, Any]:
 
     order_match = _ORDER_ID.search(msg)
     order_id = order_match.group(0).upper() if order_match else None
-    proof = bool(_PROOF.search(msg))
+    proof_unavailable = bool(_PROOF_UNAVAILABLE.search(msg))
+    # "proof mentioned" means proof is actually offered — not when they say they can't.
+    proof = bool(_PROOF.search(msg)) and not proof_unavailable
 
     sentiment = "calm"
     if _ANGRY.search(msg):
@@ -96,9 +118,14 @@ def fallback_extract(message: str) -> dict[str, Any]:
     elif _DAMAGED_ARRIVAL.search(msg):
         reason, condition = "damaged_on_arrival", "damaged"
         evidence = _evidence(msg, _DAMAGED_ARRIVAL)
-    elif _DEFECT.search(msg):
+    elif _DEFECT.search(msg) or _INTERNAL.search(msg) or _NOT_WORKING.search(msg):
         reason, condition = "defective_or_not_working", "defective"
-        evidence = _evidence(msg, _DEFECT)
+        evidence = _evidence(msg, _DEFECT, _INTERNAL, _NOT_WORKING)
+    elif proof_unavailable:
+        # "I can't show it / it's not visible" with no other signal -> treat as a
+        # (non-visible) defect claim, never a clean return.
+        reason, condition = "defective_or_not_working", "defective"
+        evidence = _evidence(msg, _PROOF_UNAVAILABLE)
     elif _CANCEL.search(msg):
         intent_type, reason = "cancellation_status", "duplicate_refund"
         evidence = _evidence(msg, _CANCEL)
@@ -147,6 +174,7 @@ def fallback_extract(message: str) -> dict[str, Any]:
         "reason": reason,
         "product_condition_claimed": condition,
         "proof_mentioned": proof,
+        "proof_unavailable": proof_unavailable,
         "order_id_mentioned": order_id,
         "urgency_or_sentiment": sentiment,
         "needs_clarification": needs_clarification,

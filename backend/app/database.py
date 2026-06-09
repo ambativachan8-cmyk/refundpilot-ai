@@ -31,6 +31,7 @@ def init_db(reset: bool = False) -> None:
                 "DROP TABLE IF EXISTS customers;"
                 "DROP TABLE IF EXISTS orders;"
                 "DROP TABLE IF EXISTS logs;"
+                "DROP TABLE IF EXISTS support_sessions;"
             )
         cur.executescript(
             """
@@ -51,6 +52,21 @@ def init_db(reset: bool = False) -> None:
                 timestamp TEXT, session_id TEXT, step TEXT, tool_name TEXT,
                 input_summary TEXT, output_summary TEXT, status TEXT,
                 decision_snapshot TEXT
+            );
+            CREATE TABLE IF NOT EXISTS support_sessions (
+                session_id TEXT PRIMARY KEY,
+                customer_id TEXT,
+                selected_order_id TEXT,
+                stage TEXT,
+                last_decision TEXT,
+                last_reason TEXT,
+                pending_requirement TEXT,
+                defect_claim_active INTEGER DEFAULT 0,
+                proof_required INTEGER DEFAULT 0,
+                proof_received INTEGER DEFAULT 0,
+                clarification_question TEXT,
+                turn_count INTEGER DEFAULT 0,
+                updated_at TEXT
             );
             """
         )
@@ -195,5 +211,65 @@ def get_logs(session_id: Optional[str] = None, limit: int = 500) -> list[dict[st
                 "SELECT * FROM logs ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+# --- Support sessions (multi-turn conversation state) ----------------------
+_BOOL_FIELDS = ("defect_claim_active", "proof_required", "proof_received")
+
+
+def get_session(session_id: str) -> Optional[dict[str, Any]]:
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM support_sessions WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        if not row:
+            return None
+        s = dict(row)
+        for f in _BOOL_FIELDS:
+            s[f] = bool(s.get(f))
+        return s
+    finally:
+        conn.close()
+
+
+def save_session(state: dict[str, Any]) -> None:
+    """Upsert a support session. Unknown keys are ignored."""
+    record = {
+        "session_id": state["session_id"],
+        "customer_id": state.get("customer_id"),
+        "selected_order_id": state.get("selected_order_id"),
+        "stage": state.get("stage", "new_request"),
+        "last_decision": state.get("last_decision"),
+        "last_reason": state.get("last_reason"),
+        "pending_requirement": state.get("pending_requirement", "none"),
+        "defect_claim_active": int(bool(state.get("defect_claim_active"))),
+        "proof_required": int(bool(state.get("proof_required"))),
+        "proof_received": int(bool(state.get("proof_received"))),
+        "clarification_question": state.get("clarification_question"),
+        "turn_count": int(state.get("turn_count", 1)),
+        "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    conn = _connect()
+    try:
+        conn.execute(
+            "INSERT INTO support_sessions (session_id,customer_id,selected_order_id,"
+            "stage,last_decision,last_reason,pending_requirement,defect_claim_active,"
+            "proof_required,proof_received,clarification_question,turn_count,updated_at) "
+            "VALUES (:session_id,:customer_id,:selected_order_id,:stage,:last_decision,"
+            ":last_reason,:pending_requirement,:defect_claim_active,:proof_required,"
+            ":proof_received,:clarification_question,:turn_count,:updated_at) "
+            "ON CONFLICT(session_id) DO UPDATE SET "
+            "customer_id=excluded.customer_id, selected_order_id=excluded.selected_order_id, "
+            "stage=excluded.stage, last_decision=excluded.last_decision, "
+            "last_reason=excluded.last_reason, pending_requirement=excluded.pending_requirement, "
+            "defect_claim_active=excluded.defect_claim_active, proof_required=excluded.proof_required, "
+            "proof_received=excluded.proof_received, clarification_question=excluded.clarification_question, "
+            "turn_count=excluded.turn_count, updated_at=excluded.updated_at",
+            record,
+        )
+        conn.commit()
     finally:
         conn.close()

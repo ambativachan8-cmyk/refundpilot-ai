@@ -94,22 +94,26 @@ The agent is a LangGraph `StateGraph` over a shared `AgentState` (TypedDict).
 Nodes, in order:
 
 1. `receive_request` — log the incoming message.
-2. `identify_customer` — resolve the customer (→ `handle_error` if not found).
-2b. `extract_intent` — derive a structured `RefundIntent` from the message (intent
-   type, reason, claimed condition, proof mentioned, sentiment, confidence). Uses
-   the **LLM when `OPENAI_API_KEY` is set**, otherwise a deterministic keyword
-   extractor. This describes *what the customer wants*; it never decides the outcome.
-3. `fetch_customer` — load CRM profile (tier, refund history, risk flag).
-4. `fetch_order` — load the order; if the customer has several, **keyword-match**
-   the message, else pick the most recent and **log a warning** (→ `handle_error`
-   if none found).
+2. `load_session_state` — load the prior **multi-turn conversation state** for this
+   `session_id` (stage, whether a defect claim is active, whether proof was
+   requested, the order under discussion).
+3. `extract_intent` — derive a structured `RefundIntent` from the message (intent
+   type, reason, claimed condition, `proof_mentioned`, `proof_unavailable`,
+   sentiment, confidence). Uses the **LLM when `OPENAI_API_KEY` is set**, otherwise
+   a deterministic keyword extractor. Describes *what the customer wants*; never decides.
+4. `identify_customer` → `fetch_customer` → `fetch_order` (re-uses the session's
+   order across turns; keyword-matches when ambiguous; → `handle_error` if missing).
 5. `read_policy` — load the strict policy document.
-6. `run_policy_checks` — run the full battery of checks (incl. the **defect /
-   non-working** check); **each check is logged**.
-7. `decide` — apply the precedence ladder (deterministic), using the order, CRM
-   data, and the extracted intent as inputs.
-8. `generate_response` — phrase the reply (templated, optionally LLM-rephrased).
-9. `persist_logs` — finalize the audit trail.
+6. `run_policy_checks` — run the full battery (incl. the **defect / non-working**
+   check); **each check is logged**.
+7. `decide` — deterministic single-message precedence ladder (the base decision).
+8. `evaluate_conversation_state` — apply **multi-turn rules** on top of the base
+   decision. Key guard: once a defect claim is active and proof isn't verified, the
+   agent can only escalate / wait-for-proof / route to warranty — **never approve**,
+   even if the latest message looks clean. Can only make the outcome stricter.
+9. `generate_response` — phrase the reply (stage-aware; optionally LLM-rephrased).
+10. `update_session_state` — persist the new stage/flags for the next turn.
+11. `persist_logs` — finalize the audit trail.
 - `handle_error` — escalate + log a `failed` status when data is missing.
 
 > If LangGraph isn't importable, an equivalent **built-in sequential runner**
@@ -120,7 +124,8 @@ Nodes, in order:
 
 ## 6. Tools
 
-`extract_intent` (LLM or keyword fallback) · `identify_customer` ·
+`load_session_state` / `save_session` (multi-turn memory) · `extract_intent`
+(LLM or keyword fallback) · `evaluate_conversation_state` · `identify_customer` ·
 `fetch_customer_profile` · `fetch_order` (with disambiguation) ·
 `read_refund_policy` · `check_refund_window` · `check_product_condition` ·
 `check_final_sale` · `check_refund_abuse` · `check_photo_proof` ·
@@ -216,7 +221,7 @@ App at http://localhost:3000 (chat) and http://localhost:3000/admin (logs).
 
 ```bash
 cd backend
-pytest                 # 33 tests: policy engine, intent extraction, end-to-end agent
+pytest                 # 43 tests: policy, intent, multi-turn conversation, end-to-end agent
 ```
 
 Frontend checks:
@@ -282,6 +287,24 @@ So:
 - **No `OPENAI_API_KEY`** → fully deterministic (keyword intent + templated replies); the demo works end-to-end.
 - **With key** → same decisions, smarter intent parsing and warmer wording.
 - `GET /health` shows `llm_enabled`; `/chat` returns `intent_method` and `llm_mode`.
+
+### Multi-turn conversation state
+
+The agent is **not** a single-message classifier. Each conversation has a stable
+`session_id` (the frontend keeps it across turns and starts a fresh one on customer
+change, demo click, or "New conversation"). A `support_sessions` table in SQLite
+remembers the `stage`, whether a **defect claim is active**, whether **proof was
+requested/received**, and the order under discussion. The `evaluate_conversation_state`
+node enforces the most important rule:
+
+> Once a defect / "not working" claim is active and proof has not been verified,
+> the agent can never auto-approve — even if a later message looks like a clean
+> return. Saying *"it's a software/bluetooth issue that can't be shown in a photo"*
+> moves the case to **manual review**, not approval.
+
+Stages: `new_request`, `needs_clarification`, `waiting_for_proof`,
+`under_manual_review`, `warranty_support`, plus the terminal decisions. The API
+still returns one of the six `decision` values; `stage` carries the nuance.
 
 ### Why the LLM cannot override policy
 

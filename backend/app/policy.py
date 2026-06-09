@@ -19,11 +19,12 @@ from . import config
 # Kept deliberately broad: this is a SAFETY guard so a defect claim is never
 # silently auto-approved even if upstream intent extraction missed it.
 _DEFECT_PATTERNS = re.compile(
-    r"\b(defect(ive)?|faulty|broken|not\s+working|does\s*n'?t\s+work|"
-    r"do\s+not\s+work|stopped?\s+working|malfunction(ing)?|warranty|"
+    r"\b(defect(ive)?|faulty|broken|malfunction(ing)?|warranty|"
     r"won'?t\s+(turn\s+on|start|charge)|not\s+turning\s+on|dead|no\s+power|"
     r"cracked|shattered|screen\s+issue|battery\s+issue|audio\s+issue|"
-    r"product\s+issue|having\s+(an?\s+)?(issue|problem))\b",
+    r"software|bluetooth|firmware|internal|product\s+issue|"
+    r"having\s+(an?\s+)?(issue|problem))\b"
+    r"|(not|isn'?t|aren'?t|does\s*n'?t|do\s*n'?t|won'?t|stopped?)\s+(\w+\s+){0,3}work\w*",
     re.IGNORECASE,
 )
 # Keywords that signal a missing / undelivered package.

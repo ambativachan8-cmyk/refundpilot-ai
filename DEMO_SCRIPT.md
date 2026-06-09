@@ -73,6 +73,28 @@ Point at: the **Escalated** badge, the reply asking for proof, and the amber
 **defect** policy check. (In the admin tab you can show the `extract_intent` row
 with `reason=defective_or_not_working`.)
 
+**Now the multi-turn part — keep typing in the SAME conversation (do not reset):**
+
+- Send (exact message):
+
+  > **how can i upload a picture as this is a problem of software or bluetooth which cannot come in photos**
+
+> "This is the important bit. The customer now says the problem is internal —
+> software or bluetooth — and can't be shown in a photo. A naive bot would see a
+> 'clean' message with no defect keyword and approve. RefundPilot remembers the
+> defect claim from the previous turn via the session state, detects
+> `proof_unavailable`, and moves the case to **manual review** — it still does
+> **not** approve. That's the difference between a controlled support agent and a
+> single-message classifier."
+
+Point at: the **Manual review** stage pill in the chat header, the reply, and in
+the admin tab the `load_session_state` (defect_active=True) and
+`evaluate_conversation_state` rows. Optionally add one more turn:
+
+  > **I cannot provide photo proof**
+
+> "Still not approved — escalated to manual review / warranty."
+
 ## 4. Demo 2 — policy violation / holding the line (~2:00)
 
 - Click the **"Policy violation"** quick demo button (switches to **CUST-002, Meera Iyer**).

@@ -46,6 +46,8 @@ def template_response(
     customer: dict[str, Any],
     order: dict[str, Any],
     intent: dict[str, Any] | None = None,
+    stage: str | None = None,
+    pending: str | None = None,
 ) -> str:
     name = customer.get("name", "there").split(" ")[0]
     product = order.get("product_name", "your item")
@@ -53,6 +55,28 @@ def template_response(
     intent = intent or {}
     is_defect = intent.get("reason") == "defective_or_not_working"
     needs_clarification = bool(intent.get("needs_clarification"))
+
+    # --- Stage-aware replies take priority (multi-turn support workflow) -----
+    if stage == "waiting_for_proof":
+        return (
+            f"Hi {name}, I can't approve a refund for the {product} yet because it's "
+            "reported as not working, and a defect claim needs verification. Could you "
+            "upload a photo or short video showing the issue? Our support team will "
+            "review it and follow up."
+        )
+    if stage == "under_manual_review":
+        return (
+            f"Hi {name}, I understand the issue with the {product} may not be visible "
+            "in a photo. I still can't approve an immediate refund without verification, "
+            "so I've escalated this to manual review / warranty support — the team will "
+            "validate the issue and get back to you."
+        )
+    if stage == "needs_clarification":
+        return (
+            f"Hi {name}, I'd like to help with the right order. Could you confirm whether "
+            "the item is unused, defective, damaged, or if this is a missing-package "
+            "issue — and which product it's about?"
+        )
 
     if decision == "approved" and partial:
         return (
@@ -168,7 +192,9 @@ def generate_response(
     checks: list[dict[str, Any]],
     message: str,
     intent: dict[str, Any] | None = None,
+    stage: str | None = None,
+    pending: str | None = None,
 ) -> tuple[str, str]:
     """Return (customer_response, llm_mode)."""
-    base = template_response(decision, customer, order, intent)
+    base = template_response(decision, customer, order, intent, stage, pending)
     return _maybe_llm_rephrase(base, decision, customer, order, checks, message)

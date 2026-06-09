@@ -53,9 +53,25 @@ export interface LogEntry {
   decision_snapshot: string | null;
 }
 
+export type Stage =
+  | "new_request"
+  | "needs_clarification"
+  | "waiting_for_proof"
+  | "proof_received"
+  | "under_manual_review"
+  | "approved"
+  | "denied"
+  | "escalated"
+  | "warranty_support"
+  | "store_credit"
+  | "already_cancelled";
+
 export interface ChatResponse {
   session_id: string;
   decision: Decision;
+  stage: Stage;
+  pending_requirement: string;
+  turn_count: number;
   response: string;
   customer: Customer | null;
   order: Order | null;

@@ -16,6 +16,30 @@ Decision = Literal[
 
 CheckStatus = Literal["success", "warning", "failed"]
 
+# Conversation stage (multi-turn support state). Richer than `Decision`; the API
+# still returns one of the 6 Decisions, with `stage` carrying the nuance.
+Stage = Literal[
+    "new_request",
+    "needs_clarification",
+    "waiting_for_proof",
+    "proof_received",
+    "under_manual_review",
+    "approved",
+    "denied",
+    "escalated",
+    "warranty_support",
+    "store_credit",
+    "already_cancelled",
+]
+
+PendingRequirement = Literal[
+    "clarify_order",
+    "clarify_condition",
+    "provide_photo_or_video_proof",
+    "manual_review",
+    "none",
+]
+
 IntentType = Literal[
     "refund_request",
     "warranty_support",
@@ -50,6 +74,7 @@ class RefundIntent(BaseModel):
     reason: IntentReason = "unknown"
     product_condition_claimed: Literal["unused", "used", "damaged", "defective", "unknown"] = "unknown"
     proof_mentioned: bool = False
+    proof_unavailable: bool = False  # customer says they CANNOT provide proof
     order_id_mentioned: Optional[str] = None
     urgency_or_sentiment: Literal["calm", "frustrated", "angry", "unknown"] = "unknown"
     needs_clarification: bool = False
@@ -108,11 +133,15 @@ class ChatRequest(BaseModel):
     customer_id: str = Field(..., examples=["CUST-001"])
     message: str = Field(..., examples=["I want to return my headphones, delivered 5 days ago, unused."])
     order_id: Optional[str] = None  # optional explicit order selection
+    session_id: Optional[str] = None  # reuse to continue a conversation
 
 
 class ChatResponse(BaseModel):
     session_id: str
     decision: Decision
+    stage: Stage = "new_request"
+    pending_requirement: PendingRequirement = "none"
+    turn_count: int = 1
     response: str
     intent: Optional[RefundIntent] = None
     intent_method: str = "fallback"  # "llm" or "fallback"

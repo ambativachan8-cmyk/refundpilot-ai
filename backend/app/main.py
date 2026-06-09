@@ -80,7 +80,8 @@ def chat(req: ChatRequest) -> ChatResponse:
     if not database.get_customer(req.customer_id):
         raise HTTPException(status_code=404, detail=f"Customer {req.customer_id} not found")
 
-    session_id = f"sess-{uuid.uuid4().hex[:8]}"
+    # Reuse the conversation's session_id if the client sent one; else start new.
+    session_id = req.session_id or f"sess-{uuid.uuid4().hex[:8]}"
     result = graph.run_agent(
         session_id=session_id,
         customer_id=req.customer_id,
@@ -90,6 +91,9 @@ def chat(req: ChatRequest) -> ChatResponse:
     return ChatResponse(
         session_id=session_id,
         decision=result.get("decision", "escalated"),
+        stage=result.get("stage", "escalated"),
+        pending_requirement=result.get("pending_requirement", "none"),
+        turn_count=result.get("turn_count", 1),
         response=result.get("customer_response", ""),
         intent=result.get("intent"),
         intent_method=result.get("intent_method", "fallback"),

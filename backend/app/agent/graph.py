@@ -14,7 +14,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import decisions, tools
+from .. import database
+from . import conversation, decisions, tools
 from .state import AgentState
 
 # Detect LangGraph availability once at import time.
@@ -48,6 +49,25 @@ def node_receive_request(state: AgentState) -> dict[str, Any]:
         f"message='{state.get('user_message', '')[:80]}'",
     )
     upd["retry_count"] = state.get("retry_count", 0)
+    return upd
+
+
+def node_load_session(state: AgentState) -> dict[str, Any]:
+    prior = database.get_session(state["session_id"])
+    turn = (prior.get("turn_count", 0) if prior else 0) + 1
+    summary = (
+        f"stage={prior.get('stage')} defect_active={prior.get('defect_claim_active')} "
+        f"proof_required={prior.get('proof_required')} turn={turn}"
+        if prior else f"new session, turn={turn}"
+    )
+    upd = _log(state, "load_session_state", "load_session_state",
+               f"session={state['session_id']}", summary,
+               status="warning" if (prior and prior.get("defect_claim_active")) else "success")
+    upd["prior_session"] = prior
+    upd["turn_count"] = turn
+    # Continue with the same order the conversation was about, if known.
+    if prior and prior.get("selected_order_id") and not state.get("detected_order_id"):
+        upd["detected_order_id"] = prior["selected_order_id"]
     return upd
 
 
@@ -148,8 +168,30 @@ def node_decide(state: AgentState) -> dict[str, Any]:
     decision = state.get("decision", "escalated")
     upd = _log(state, "decide", "decide_refund",
                f"checks={len(state.get('policy_checks', []))}",
-               f"decision={decision}", snapshot=decision)
+               f"base_decision={decision}", snapshot=decision)
     upd["decision"] = decision
+    return upd
+
+
+def node_evaluate_state(state: AgentState) -> dict[str, Any]:
+    """Apply multi-turn conversation rules on top of the base policy decision."""
+    base = state.get("decision", "escalated")
+    conv = conversation.evaluate(
+        state.get("prior_session"), state.get("intent") or {},
+        state["order"], base,
+    )
+    changed = " (overridden by conversation state)" if conv["decision"] != base else ""
+    upd = _log(state, "evaluate_conversation_state", "evaluate_conversation_state",
+               f"base={base} stage_in={(state.get('prior_session') or {}).get('stage')}",
+               f"decision={conv['decision']} stage={conv['stage']} "
+               f"pending={conv['pending_requirement']}{changed}",
+               status="warning" if conv["decision"] in ("escalated", "warranty_support") else "success",
+               snapshot=conv["decision"])
+    upd["decision"] = conv["decision"]
+    upd["stage"] = conv["stage"]
+    upd["pending_requirement"] = conv["pending_requirement"]
+    upd["conv_reason"] = conv["last_reason"]
+    upd["conv"] = conv  # carried for update_session
     return upd
 
 
@@ -158,7 +200,7 @@ def node_generate_response(state: AgentState) -> dict[str, Any]:
     response, mode = decisions.generate_response(
         decision, state["customer"], state["order"],
         state.get("policy_checks", []), state.get("user_message", ""),
-        state.get("intent"),
+        state.get("intent"), state.get("stage"), state.get("pending_requirement"),
     )
     upd = _log(state, "generate_response", "generate_response",
                f"mode={mode}", f"Generated {len(response)}-char reply",
@@ -166,6 +208,33 @@ def node_generate_response(state: AgentState) -> dict[str, Any]:
     upd["customer_response"] = response
     upd["llm_mode"] = mode
     return upd
+
+
+def node_update_session(state: AgentState) -> dict[str, Any]:
+    conv = state.get("conv") or {}
+    prior = state.get("prior_session") or {}
+    order = state.get("order") or {}
+    stage = state.get("stage") or ("escalated" if state.get("error") else "new_request")
+    record = {
+        "session_id": state["session_id"],
+        "customer_id": state.get("selected_customer_id"),
+        "selected_order_id": state.get("detected_order_id") or order.get("order_id"),
+        "stage": stage,
+        "last_decision": state.get("decision"),
+        "last_reason": state.get("conv_reason") or state.get("error"),
+        "pending_requirement": state.get("pending_requirement", "none"),
+        "defect_claim_active": conv.get("defect_claim_active", prior.get("defect_claim_active", False)),
+        "proof_required": conv.get("proof_required", prior.get("proof_required", False)),
+        "proof_received": conv.get("proof_received", prior.get("proof_received", False)),
+        "clarification_question": conv.get("clarification_question"),
+        "turn_count": state.get("turn_count", 1),
+    }
+    database.save_session(record)
+    return _log(state, "update_session_state", "update_session_state",
+                f"session={state['session_id']}",
+                f"stage={stage} defect_active={record['defect_claim_active']} "
+                f"proof_required={record['proof_required']} proof_received={record['proof_received']}",
+                snapshot=state.get("decision"))
 
 
 def node_persist_logs(state: AgentState) -> dict[str, Any]:
@@ -205,6 +274,7 @@ def _route_after_order(state: AgentState) -> str:
 def _build_langgraph():  # pragma: no cover - exercised only when installed
     g = StateGraph(AgentState)
     g.add_node("receive_request", node_receive_request)
+    g.add_node("load_session_state", node_load_session)
     g.add_node("extract_intent", node_extract_intent)
     g.add_node("identify_customer", node_identify_customer)
     g.add_node("fetch_customer", node_fetch_customer)
@@ -212,12 +282,15 @@ def _build_langgraph():  # pragma: no cover - exercised only when installed
     g.add_node("read_policy", node_read_policy)
     g.add_node("run_policy_checks", node_run_policy_checks)
     g.add_node("decide", node_decide)
+    g.add_node("evaluate_conversation_state", node_evaluate_state)
     g.add_node("generate_response", node_generate_response)
+    g.add_node("update_session_state", node_update_session)
     g.add_node("persist_logs", node_persist_logs)
     g.add_node("handle_error", node_handle_error)
 
     g.set_entry_point("receive_request")
-    g.add_edge("receive_request", "extract_intent")
+    g.add_edge("receive_request", "load_session_state")
+    g.add_edge("load_session_state", "extract_intent")
     g.add_edge("extract_intent", "identify_customer")
     g.add_conditional_edges("identify_customer", _route_after_customer,
                             {"handle_error": "handle_error", "fetch_customer": "fetch_customer"})
@@ -226,10 +299,12 @@ def _build_langgraph():  # pragma: no cover - exercised only when installed
                             {"handle_error": "handle_error", "read_policy": "read_policy"})
     g.add_edge("read_policy", "run_policy_checks")
     g.add_edge("run_policy_checks", "decide")
-    g.add_edge("decide", "generate_response")
-    g.add_edge("generate_response", "persist_logs")
+    g.add_edge("decide", "evaluate_conversation_state")
+    g.add_edge("evaluate_conversation_state", "generate_response")
+    g.add_edge("generate_response", "update_session_state")
+    g.add_edge("update_session_state", "persist_logs")
     g.add_edge("persist_logs", END)
-    g.add_edge("handle_error", "persist_logs")
+    g.add_edge("handle_error", "update_session_state")
     return g.compile()
 
 
@@ -242,22 +317,27 @@ def _run_sequential(state: AgentState) -> AgentState:
         state.update(node(state))
 
     apply(node_receive_request)
+    apply(node_load_session)
     apply(node_extract_intent)
     apply(node_identify_customer)
     if state.get("error"):
         apply(node_handle_error)
+        apply(node_update_session)
         apply(node_persist_logs)
         return state
     apply(node_fetch_customer)
     apply(node_fetch_order)
     if state.get("error"):
         apply(node_handle_error)
+        apply(node_update_session)
         apply(node_persist_logs)
         return state
     apply(node_read_policy)
     apply(node_run_policy_checks)
     apply(node_decide)
+    apply(node_evaluate_state)
     apply(node_generate_response)
+    apply(node_update_session)
     apply(node_persist_logs)
     return state
 
@@ -276,6 +356,12 @@ def run_agent(
         "detected_order_id": order_id,
         "intent": None,
         "intent_method": "fallback",
+        "prior_session": None,
+        "stage": "new_request",
+        "pending_requirement": "none",
+        "turn_count": 1,
+        "conv_reason": None,
+        "conv": None,
         "policy_checks": [],
         "tool_calls": [],
         "logs": [],

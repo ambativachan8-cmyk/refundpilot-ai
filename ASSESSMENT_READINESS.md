@@ -18,6 +18,10 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
 - ✅ Agent calls tools dynamically; tools validate policy rules (`tools.py`,
   `policy.py`).
 - ✅ Logs persisted to SQLite (`logs` table); exposed via `/admin/logs`.
+- ✅ **Multi-turn conversation state** persisted (`support_sessions` table). Nodes
+  `load_session_state` and `evaluate_conversation_state` remember defect claims,
+  proof requests, and the order across turns. Defect-no-proof claims cannot be
+  approved by a later "clean" message.
 - ✅ Failures / warnings / ambiguous cases visible (missing order → `handle_error`
   failed log; ambiguous order → warning; defect-no-proof → warning).
 
@@ -63,8 +67,13 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
 | 11 | Cancelled (CUST-013) | already_cancelled | `test_policy` |
 | 12 | International (CUST-012) | escalated | `test_policy` |
 | 13 | Warranty after window (CUST-014) | warranty_support | `test_policy` |
-| 14 | Ambiguous message | escalated (clarify) | `test_intent`, ladder |
+| 14 | Ambiguous message | escalated (clarify) | `test_intent`, `test_agent` |
 | 15 | Unknown order id | escalated (error path) | `test_agent` |
+| 16 | **Defect → "internal/software, no photo" (same session)** | **not approved → manual review** | `test_agent` |
+| 17 | **Defect → "I cannot provide proof" (same session)** | **not approved** | `test_agent` |
+| 18 | **Clarify ("return my product") → then "unused, 5 days"** | escalated → approved | `test_agent` |
 
-**Verification:** `pytest` → 33 passed · `npx tsc --noEmit` clean · `npm run build`
-clean · live HTTP smoke confirms scenarios 1–3 + admin intent/defect logs.
+**Verification:** `pytest` → 43 passed · `npx tsc --noEmit` clean · `npm run build`
+clean · live multi-turn HTTP smoke confirms the defect/no-proof follow-up stays
+`under_manual_review` (not approved), clean return approves, clarify-then-approve
+works, and CUST-002 is denied.

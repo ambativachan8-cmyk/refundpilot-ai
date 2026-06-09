@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { ChatResponse, Decision } from "@/lib/types";
+import type { ChatResponse, Decision, Stage } from "@/lib/types";
 import { DecisionBadge } from "./StatusBadge";
 import { VoiceButton } from "./VoiceButton";
 
@@ -17,33 +17,59 @@ export interface InjectedScenario {
   nonce: number;
 }
 
+const STAGE_LABEL: Partial<Record<Stage, string>> = {
+  needs_clarification: "Awaiting clarification",
+  waiting_for_proof: "Waiting for proof",
+  under_manual_review: "Manual review",
+  warranty_support: "Warranty support",
+};
+
 export function ChatPanel({
   customerId,
   injected,
+  resetNonce,
   onResult,
 }: {
   customerId: string;
   injected: InjectedScenario | null;
+  resetNonce: number;
   onResult: (r: ChatResponse) => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [tts, setTts] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [stage, setStage] = useState<Stage | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
-  async function send(text: string) {
+  function resetConversation() {
+    setMessages([]);
+    setSessionId(null);
+    setStage(null);
+  }
+
+  async function send(text: string, fresh = false) {
     const msg = text.trim();
     if (!msg || loading) return;
     setInput("");
-    setMessages((m) => [...m, { role: "customer", text: msg }]);
+    const useSession = fresh ? null : sessionId;
+    if (fresh) {
+      setSessionId(null);
+      setStage(null);
+      setMessages([{ role: "customer", text: msg }]);
+    } else {
+      setMessages((m) => [...m, { role: "customer", text: msg }]);
+    }
     setLoading(true);
     try {
-      const r = await api.chat(customerId, msg);
+      const r = await api.chat(customerId, msg, useSession);
+      setSessionId(r.session_id);
+      setStage(r.stage);
       setMessages((m) => [...m, { role: "agent", text: r.response, decision: r.decision }]);
       onResult(r);
       if (tts && typeof window !== "undefined" && window.speechSynthesis) {
@@ -61,11 +87,17 @@ export function ChatPanel({
     }
   }
 
-  // Auto-send when a quick demo scenario is injected from the page.
+  // Quick demo scenario from the page → start a fresh conversation.
   useEffect(() => {
-    if (injected) send(injected.message);
+    if (injected) send(injected.message, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [injected?.nonce]);
+
+  // Customer change / "New conversation" → clear the thread + session.
+  useEffect(() => {
+    resetConversation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetNonce]);
 
   return (
     <div className="card flex h-[calc(100vh-9.5rem)] flex-col">
@@ -74,18 +106,35 @@ export function ChatPanel({
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse-dot" />
           <span className="text-sm font-semibold text-white">Support Chat</span>
+          {stage && STAGE_LABEL[stage] && (
+            <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+              {STAGE_LABEL[stage]}
+            </span>
+          )}
         </div>
-        <button
-          onClick={() => setTts((v) => !v)}
-          className={`rounded-lg border px-2.5 py-1 text-xs transition ${
-            tts
-              ? "border-indigo-400/50 bg-indigo-500/15 text-indigo-300"
-              : "border-white/10 text-slate-400 hover:text-white"
-          }`}
-          title="Read agent replies aloud"
-        >
-          🔊 Voice reply {tts ? "on" : "off"}
-        </button>
+        <div className="flex items-center gap-2">
+          {sessionId && (
+            <span className="hidden font-mono text-[10px] text-slate-500 sm:inline">{sessionId}</span>
+          )}
+          <button
+            onClick={resetConversation}
+            className="rounded-lg border border-white/10 px-2.5 py-1 text-xs text-slate-400 transition hover:border-indigo-400/50 hover:text-white"
+            title="Start a new conversation (new session)"
+          >
+            New conversation
+          </button>
+          <button
+            onClick={() => setTts((v) => !v)}
+            className={`rounded-lg border px-2.5 py-1 text-xs transition ${
+              tts
+                ? "border-indigo-400/50 bg-indigo-500/15 text-indigo-300"
+                : "border-white/10 text-slate-400 hover:text-white"
+            }`}
+            title="Read agent replies aloud"
+          >
+            🔊 {tts ? "on" : "off"}
+          </button>
+        </div>
       </div>
 
       {/* messages */}
@@ -94,7 +143,8 @@ export function ChatPanel({
           <div className="grid h-full place-items-center text-center">
             <div className="max-w-xs text-sm text-slate-500">
               Pick a customer and describe the refund request — or use a quick demo
-              scenario. The agent will verify CRM data and policy before deciding.
+              scenario. The agent verifies CRM data, policy, and conversation history
+              before deciding.
             </div>
           </div>
         )}

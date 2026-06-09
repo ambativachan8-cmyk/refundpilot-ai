@@ -40,3 +40,22 @@ def test_vague_message_needs_clarification():
 def test_order_id_extracted():
     i = fallback_extract("please refund ORD-1001, it's unused")
     assert i["order_id_mentioned"] == "ORD-1001"
+
+
+def test_internal_software_issue_is_defect_with_proof_unavailable():
+    i = fallback_extract(
+        "how can i upload a picture as this is a problem of software or bluetooth which cannot come in photos"
+    )
+    assert i["reason"] == "defective_or_not_working"
+    assert i["proof_unavailable"] is True
+    assert i["needs_clarification"] is False
+
+
+def test_explicit_no_proof_sets_proof_unavailable():
+    i = fallback_extract("I cannot provide photo proof")
+    assert i["proof_unavailable"] is True
+
+
+def test_bluetooth_issue_classified_as_defect():
+    i = fallback_extract("the bluetooth keeps disconnecting")
+    assert i["reason"] == "defective_or_not_working"

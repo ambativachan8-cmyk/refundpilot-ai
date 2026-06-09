@@ -11,6 +11,12 @@ class AgentState(TypedDict, total=False):
     detected_order_id: Optional[str]
     intent: Optional[dict[str, Any]]
     intent_method: str
+    prior_session: Optional[dict[str, Any]]
+    stage: str
+    pending_requirement: str
+    turn_count: int
+    conv_reason: Optional[str]
+    conv: Optional[dict[str, Any]]
     customer: Optional[dict[str, Any]]
     order: Optional[dict[str, Any]]
     policy_checks: list[dict[str, Any]]

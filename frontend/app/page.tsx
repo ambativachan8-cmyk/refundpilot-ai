@@ -57,6 +57,7 @@ export default function Home() {
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [checks, setChecks] = useState<PolicyCheck[]>([]);
   const [injected, setInjected] = useState<InjectedScenario | null>(null);
+  const [resetNonce, setResetNonce] = useState(0);
 
   useEffect(() => {
     api.customers().then(setCustomers).catch(() => {});
@@ -78,8 +79,17 @@ export default function Home() {
     setChecks(r.policy_checks);
   }
 
+  // Manual customer change starts a fresh conversation for that customer.
+  function selectCustomer(id: string) {
+    setSelectedId(id);
+    setChecks([]);
+    setResetNonce((n) => n + 1);
+  }
+
+  // Demo button: switch customer + start a fresh conversation, then auto-send.
   function runDemo(d: DemoScenario) {
     setSelectedId(d.customerId);
+    setChecks([]);
     setInjected({ message: d.message, nonce: Date.now() });
   }
 
@@ -91,7 +101,7 @@ export default function Home() {
           <CustomerSelector
             customers={customers}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={selectCustomer}
           />
           <div className="mt-4">
             <CustomerProfile customer={activeCustomer} />
@@ -121,6 +131,7 @@ export default function Home() {
         <ChatPanel
           customerId={selectedId}
           injected={injected}
+          resetNonce={resetNonce}
           onResult={handleResult}
         />
       </section>

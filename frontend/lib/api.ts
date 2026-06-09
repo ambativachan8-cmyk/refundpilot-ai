@@ -24,11 +24,15 @@ export const api = {
   policy: () => getJSON<PolicyResponse>("/policy"),
   logs: () => getJSON<LogEntry[]>("/admin/logs"),
 
-  async chat(customer_id: string, message: string): Promise<ChatResponse> {
+  async chat(
+    customer_id: string,
+    message: string,
+    session_id?: string | null,
+  ): Promise<ChatResponse> {
     const res = await fetch(`${API_URL}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customer_id, message }),
+      body: JSON.stringify({ customer_id, message, session_id: session_id ?? null }),
     });
     if (!res.ok) throw new Error(`chat -> ${res.status}`);
     return res.json() as Promise<ChatResponse>;
