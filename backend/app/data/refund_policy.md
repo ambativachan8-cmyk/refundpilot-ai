@@ -36,6 +36,11 @@ rule it checks**.
     not written in this policy.
 15. **Auditability.** Every rule the agent checks must be recorded in the reasoning
     log with a pass / warning / fail status.
+16. **Defect / "not working" claims.** A claim that the product is defective or not
+    working is **not** a clean return and must **never be auto-approved**. Inside
+    the refund window it is **escalated** for proof + manual review; outside the
+    window it is routed to **warranty support**. Damaged-on-arrival (with photo
+    proof) is handled under rule 4.
 
 ## Decision precedence (highest first)
 
@@ -46,11 +51,13 @@ rule it checks**.
 5. Damaged on arrival
    - with photo proof → `approved`
    - without photo proof → `escalated`
-6. Outside refund window
-   - defect / warranty context → `warranty_support`
-   - otherwise → `denied`
-7. Product used (and not damaged) → `denied`
-8. High-value (> ₹25,000) → `escalated`
-9. Gift order → `store_credit`
-10. International order (not clearly eligible) → `escalated`
-11. Otherwise → `approved`
+6. Defect / "not working" claim
+   - outside refund window → `warranty_support`
+   - inside refund window → `escalated` (proof + manual review required)
+7. Outside refund window (no defect) → `denied`
+8. Product used (and not damaged/defective) → `denied`
+9. High-value (> ₹25,000) → `escalated`
+10. Gift order → `store_credit`
+11. International order (not clearly eligible) → `escalated`
+12. Ambiguous request with no actionable signal → `escalated` (ask to clarify)
+13. Otherwise → `approved`

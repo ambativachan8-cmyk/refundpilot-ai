@@ -33,6 +33,22 @@ def test_denial_holds_the_line():
     assert "refund" in state["customer_response"].lower()
 
 
+def test_not_working_claim_does_not_auto_approve():
+    state = run("CUST-001", "my product is not working i want refund")
+    assert state["decision"] != "approved"
+    assert state["decision"] in ("escalated", "warranty_support")
+    # intent extraction ran and is recorded
+    assert state.get("intent") is not None
+    assert state.get("intent_method") in ("llm", "fallback")
+    logs = database.get_logs(session_id="test-CUST-001")
+    assert any(l["step"] == "extract_intent" for l in logs)
+    # defect policy check is present as a warning
+    assert any("Defect" in l["input_summary"] and l["status"] == "warning"
+               for l in logs if l["tool_name"] == "check_policy_rule")
+    # response asks for proof, does not promise a refund is processing
+    assert "proof" in state["customer_response"].lower() or "review" in state["customer_response"].lower()
+
+
 def test_high_value_escalated_with_warning_log():
     state = run("CUST-008", "return my laptop")
     assert state["decision"] == "escalated"

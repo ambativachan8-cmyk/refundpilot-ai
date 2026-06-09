@@ -9,6 +9,8 @@ class AgentState(TypedDict, total=False):
     user_message: str
     selected_customer_id: str
     detected_order_id: Optional[str]
+    intent: Optional[dict[str, Any]]
+    intent_method: str
     customer: Optional[dict[str, Any]]
     order: Optional[dict[str, Any]]
     policy_checks: list[dict[str, Any]]

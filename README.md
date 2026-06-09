@@ -95,13 +95,19 @@ Nodes, in order:
 
 1. `receive_request` — log the incoming message.
 2. `identify_customer` — resolve the customer (→ `handle_error` if not found).
+2b. `extract_intent` — derive a structured `RefundIntent` from the message (intent
+   type, reason, claimed condition, proof mentioned, sentiment, confidence). Uses
+   the **LLM when `OPENAI_API_KEY` is set**, otherwise a deterministic keyword
+   extractor. This describes *what the customer wants*; it never decides the outcome.
 3. `fetch_customer` — load CRM profile (tier, refund history, risk flag).
 4. `fetch_order` — load the order; if the customer has several, **keyword-match**
    the message, else pick the most recent and **log a warning** (→ `handle_error`
    if none found).
 5. `read_policy` — load the strict policy document.
-6. `run_policy_checks` — run the full battery of checks; **each check is logged**.
-7. `decide` — apply the precedence ladder (deterministic).
+6. `run_policy_checks` — run the full battery of checks (incl. the **defect /
+   non-working** check); **each check is logged**.
+7. `decide` — apply the precedence ladder (deterministic), using the order, CRM
+   data, and the extracted intent as inputs.
 8. `generate_response` — phrase the reply (templated, optionally LLM-rephrased).
 9. `persist_logs` — finalize the audit trail.
 - `handle_error` — escalate + log a `failed` status when data is missing.
@@ -114,10 +120,11 @@ Nodes, in order:
 
 ## 6. Tools
 
-`identify_customer` · `fetch_customer_profile` · `fetch_order` (with
-disambiguation) · `read_refund_policy` · `check_refund_window` ·
-`check_product_condition` · `check_final_sale` · `check_refund_abuse` ·
-`check_photo_proof` · `check_high_value` · `check_missing_package` ·
+`extract_intent` (LLM or keyword fallback) · `identify_customer` ·
+`fetch_customer_profile` · `fetch_order` (with disambiguation) ·
+`read_refund_policy` · `check_refund_window` · `check_product_condition` ·
+`check_final_sale` · `check_refund_abuse` · `check_photo_proof` ·
+`check_defect_claim` · `check_high_value` · `check_missing_package` ·
 `check_international` · `check_gift` · `decide_refund` · `save_reasoning_log`.
 
 ---
@@ -132,7 +139,9 @@ disambiguation) · `read_refund_policy` · `check_refund_window` ·
 10. **Cancelled** orders aren't re-refunded. 11. Defects after the window →
 **warranty support**. 12. **International** orders → manual review.
 13. Denials must offer the best alternative. 14. **No invented exceptions.**
-15. **Every checked rule is logged.**
+15. **Every checked rule is logged.** 16. **Defect / "not working" claims are
+never auto-approved** — in-window → escalate for proof/review, out-of-window →
+warranty support.
 
 Full text: [`backend/app/data/refund_policy.md`](backend/app/data/refund_policy.md).
 
@@ -145,10 +154,17 @@ The 15 CRM customers map 1:1 to the 15 required cases. Headline demos:
 | # | Customer | Situation | Expected decision |
 |---|---|---|---|
 | 1 | CUST-001 Aarav Sharma | Headphones, 5 days, unused | **approved** |
-| 2 | CUST-002 Meera Iyer | Smartwatch, 45 days, used | **denied** (warranty offered) |
-| 3 | CUST-005 Karan Mehta | Dinner set, damaged + photo proof | **approved** |
-| 4 | CUST-008 Sneha Kapoor | ₹84,999 laptop | **escalated** |
-| 5 | CUST-007 Vikram Singh | Final-sale jacket | **denied** |
+| 2 | CUST-001 Aarav Sharma | Same item, but *"not working"* (no proof) | **escalated** (asks for proof) |
+| 3 | CUST-002 Meera Iyer | Smartwatch, 45 days, used | **denied** (warranty offered) |
+| 4 | CUST-005 Karan Mehta | Dinner set, damaged + photo proof | **approved** |
+| 5 | CUST-008 Sneha Kapoor | ₹84,999 laptop | **escalated** |
+| 6 | CUST-007 Vikram Singh | Final-sale jacket | **denied** |
+
+> **Scenario 2 is the key "holds the line" case for a defect claim.** The same
+> in-window, unused order that gets approved as a clean return is *not* approved
+> once the customer says the product is "not working" — that's a defect claim and
+> requires proof/manual review. The LLM/keyword intent layer detects this; the
+> deterministic policy engine enforces it.
 
 Others: CUST-003 outside window · CUST-004 used · CUST-006 damaged no proof
 (escalate) · CUST-009 refund abuser (escalate) · CUST-010 missing package
@@ -200,7 +216,7 @@ App at http://localhost:3000 (chat) and http://localhost:3000/admin (logs).
 
 ```bash
 cd backend
-pytest                 # 21 tests: policy engine + end-to-end agent
+pytest                 # 33 tests: policy engine, intent extraction, end-to-end agent
 ```
 
 Frontend checks:
@@ -250,18 +266,33 @@ npm run build          # production build
 
 ---
 
-## 16. LLM fallback mode
+## 16. LLM behaviour & fallback mode
 
-The **decision is always deterministic** (the policy engine). The LLM is used
-only to rephrase the pre-computed reply, and any LLM error silently falls back to
-the template. So:
+The LLM is used in **two** places, and in neither does it decide the outcome:
 
-- **No `OPENAI_API_KEY`** → deterministic mode; templated replies; demo works.
-- **With key** → same decisions, warmer wording. `llm_mode` in `/chat` and the
-  admin log's `generate_response` row shows which path ran.
+1. **Intent extraction (`extract_intent`)** — interprets the customer's message into
+   a structured `RefundIntent` (intent type, reason, claimed condition, proof
+   mentioned, sentiment, confidence). With `OPENAI_API_KEY` set it calls an
+   OpenAI-compatible model with JSON output; otherwise a deterministic keyword
+   extractor runs. The admin log shows `method=llm` or `method=fallback`.
+2. **Response phrasing (`generate_response`)** — rewrites the pre-computed reply
+   into warmer wording. Any LLM error silently falls back to the template.
 
-This keeps the demo robust and makes the "controlled agent" claim verifiable:
-the LLM can never change an outcome.
+So:
+- **No `OPENAI_API_KEY`** → fully deterministic (keyword intent + templated replies); the demo works end-to-end.
+- **With key** → same decisions, smarter intent parsing and warmer wording.
+- `GET /health` shows `llm_enabled`; `/chat` returns `intent_method` and `llm_mode`.
+
+### Why the LLM cannot override policy
+
+The LLM can **interpret** the customer's language and **draft** the reply, but the
+**deterministic policy engine (`policy.py`) decides the refund outcome.** The
+decision ladder reads only structured facts — order data, CRM data, and the
+extracted intent — and returns one of the six decisions. Even if the LLM
+mislabels intent or a customer writes a very persuasive message, the engine still
+applies the rules: a defect claim is never auto-approved, a final-sale item is
+never refunded, and so on. This is why the agent is *controlled*, not a chatbot —
+and it's verifiable by running with no API key at all (identical decisions).
 
 ---
 

@@ -51,6 +51,28 @@ chatbot."
 
 Point at: the **Approved** badge, the reply, and the **Live Policy Checks** panel.
 
+## 3b. Demo — same item, defect claim (the "holds the line" highlight) (~1:30)
+
+- Keep the customer as **CUST-001 (Aarav Sharma)** — the *same* in-window, unused
+  headphones order that was just approved.
+- Send (exact message):
+
+  > **my product is not working i want refund**
+
+> "Same customer, same order that I just got approved as a clean return — but now
+> the customer says it's *not working*. That's a defect claim, not a clean return.
+> Watch what changes: the intent-extraction step classifies the reason as
+> 'defective_or_not_working', and the policy engine adds a check — 'Defect or
+> non-working product claims require proof or manual review' — that fails because
+> there's no proof. So instead of approving, the agent **escalates** and asks the
+> customer to upload a photo or video. This is the fix that makes it a real,
+> controlled agent: it reads intent from the message and refuses to auto-approve a
+> defect claim."
+
+Point at: the **Escalated** badge, the reply asking for proof, and the amber
+**defect** policy check. (In the admin tab you can show the `extract_intent` row
+with `reason=defective_or_not_working`.)
+
 ## 4. Demo 2 — policy violation / holding the line (~2:00)
 
 - Click the **"Policy violation"** quick demo button (switches to **CUST-002, Meera Iyer**).
@@ -81,11 +103,16 @@ an **Escalated** decision and a `warning` log on the high-value rule.
 ## 6. Code tour (~2:00)
 
 - **`backend/app/agent/graph.py`** — "The LangGraph `StateGraph`: the nodes and
-  the conditional edges, including the error branch. If LangGraph isn't available
-  it falls back to the same node functions sequentially."
+  the conditional edges, including the error branch. Note the `extract_intent`
+  node runs first. If LangGraph isn't available it falls back to the same node
+  functions sequentially."
+- **`backend/app/agent/intent.py`** — "Structured intent extraction — LLM with a
+  JSON schema when a key is present, deterministic keyword fallback otherwise.
+  This interprets the message; it does not decide the outcome."
 - **`backend/app/policy.py`** — "The deterministic decision ladder — this is the
-  source of truth. Cancelled, then final-sale, missing package, refund abuse,
-  damaged-with-proof, refund window, used, high-value, gift, international."
+  source of truth. Cancelled, final-sale, missing, abuse, damaged-with-proof,
+  **then the defect / not-working branch**, refund window, used, high-value,
+  gift, international, clarification."
 - **`backend/app/agent/tools.py`** — "Each tool logs to the reasoning trail."
 - **`backend/app/data/refund_policy.md`** — "The strict policy in plain English."
 - **`backend/app/seed.py`** — "Fifteen customers mapped to the fifteen required cases."
@@ -107,5 +134,6 @@ an **Escalated** decision and a `warning` log on the high-value rule.
 | Demo | Customer | Message | Expected |
 |---|---|---|---|
 | Approval | **CUST-001** | Hi, I want to return my headphones. They were delivered 5 days ago and I haven't used them. | **approved** |
+| Defect claim (highlight) | **CUST-001** | my product is not working i want refund | **escalated** (asks for proof) |
 | Holding the line | **CUST-002** | I bought a smartwatch 45 days ago. I used it for a month but now I want a full refund. | **denied** (warranty offered) |
 | (Optional) Escalation | **CUST-008** | I'd like to return the laptop I ordered. It's unused. | **escalated** |

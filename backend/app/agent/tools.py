@@ -10,6 +10,7 @@ import re
 from typing import Any, Optional
 
 from .. import database, policy
+from . import intent as intent_mod
 
 
 def save_reasoning_log(
@@ -78,8 +79,16 @@ def read_refund_policy() -> str:
     return policy.read_policy_text()
 
 
+def extract_intent(message: str) -> tuple[dict[str, Any], str, str]:
+    """Extract structured customer intent. Returns (intent_dict, method, note)."""
+    return intent_mod.extract_intent(message)
+
+
 def run_decision(
-    customer: dict[str, Any], order: dict[str, Any], message: str
+    customer: dict[str, Any],
+    order: dict[str, Any],
+    message: str,
+    intent: Optional[dict[str, Any]] = None,
 ) -> tuple[str, list[dict[str, Any]]]:
-    """Run the full policy battery + precedence ladder."""
-    return policy.decide_refund(customer, order, message)
+    """Run the full policy battery + precedence ladder (intent is an input only)."""
+    return policy.decide_refund(customer, order, message, intent)

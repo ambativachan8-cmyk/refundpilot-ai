@@ -15,10 +15,15 @@ from typing import Any
 
 from . import config
 
-# Keywords that signal a defect/warranty claim rather than a plain return.
+# Keywords that signal a defect/"not working" claim rather than a plain return.
+# Kept deliberately broad: this is a SAFETY guard so a defect claim is never
+# silently auto-approved even if upstream intent extraction missed it.
 _DEFECT_PATTERNS = re.compile(
-    r"\b(defect|defective|faulty|broken|not working|stopped working|"
-    r"malfunction|warranty|won'?t turn on|dead)\b",
+    r"\b(defect(ive)?|faulty|broken|not\s+working|does\s*n'?t\s+work|"
+    r"do\s+not\s+work|stopped?\s+working|malfunction(ing)?|warranty|"
+    r"won'?t\s+(turn\s+on|start|charge)|not\s+turning\s+on|dead|no\s+power|"
+    r"cracked|shattered|screen\s+issue|battery\s+issue|audio\s+issue|"
+    r"product\s+issue|having\s+(an?\s+)?(issue|problem))\b",
     re.IGNORECASE,
 )
 # Keywords that signal a missing / undelivered package.
@@ -175,20 +180,73 @@ def is_defect_claim(message: str) -> bool:
     return bool(_DEFECT_PATTERNS.search(message or ""))
 
 
+def check_defect_claim(order: dict[str, Any], message: str, defect: bool) -> dict[str, Any]:
+    """A defect / 'not working' claim cannot be auto-approved without proof or review."""
+    if not defect:
+        return _check(
+            "Defect or non-working product claims require proof or manual review",
+            passed=None,
+            status="success",
+            detail="No defect/non-working claim detected.",
+        )
+    has_proof = bool(order.get("photo_proof_available"))
+    return _check(
+        "Defect or non-working product claims require proof or manual review",
+        passed=has_proof,
+        status="success" if has_proof else "warning",
+        detail=(
+            "Customer described the product as not working; proof on file."
+            if has_proof
+            else "Customer described the product as not working, but no proof is available."
+        ),
+    )
+
+
+def _defect_claimed(order: dict[str, Any], message: str, intent: dict[str, Any] | None) -> bool:
+    """Defect/not-working claim from EITHER the intent layer OR the keyword guard."""
+    if is_defect_claim(message):
+        return True
+    if intent and intent.get("reason") == "defective_or_not_working":
+        return True
+    if intent and intent.get("product_condition_claimed") == "defective":
+        return True
+    return False
+
+
+def _damaged_arrival(order: dict[str, Any], intent: dict[str, Any] | None) -> bool:
+    """Damaged-on-arrival from the order record OR the intent layer."""
+    if bool(order.get("damaged_claim")):
+        return True
+    if intent and intent.get("reason") == "damaged_on_arrival":
+        return True
+    return False
+
+
 # --- The decision ladder ---------------------------------------------------
 def decide_refund(
-    customer: dict[str, Any], order: dict[str, Any], message: str
+    customer: dict[str, Any],
+    order: dict[str, Any],
+    message: str,
+    intent: dict[str, Any] | None = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """Run all checks (for the audit trail) then apply the precedence ladder.
 
+    `intent` is the structured RefundIntent (as a dict) when available. It is one
+    INPUT to the decision — it never overrides policy. The deterministic ladder
+    below is the single source of truth.
+
     Returns (decision, ordered_policy_checks).
     """
+    defect = _defect_claimed(order, message, intent)
+    damaged = _damaged_arrival(order, intent)
+
     checks = [
         check_cancelled(order),
         check_final_sale(order),
         check_missing_package(order, message),
         check_refund_abuse(customer),
         check_photo_proof(order),
+        check_defect_claim(order, message, defect),
         check_refund_window(order),
         check_product_condition(order, message),
         check_high_value(order),
@@ -198,18 +256,19 @@ def decide_refund(
 
     cancelled = order.get("status") == "cancelled"
     final_sale = bool(order.get("final_sale"))
-    missing = order.get("condition_claimed") == "missing" or bool(
-        _MISSING_PATTERNS.search(message or "")
+    missing = (
+        order.get("condition_claimed") == "missing"
+        or bool(_MISSING_PATTERNS.search(message or ""))
+        or (intent or {}).get("intent_type") == "missing_package"
     )
     abusing = customer.get("refund_count_90d", 0) > config.REFUND_ABUSE_THRESHOLD
-    damaged = bool(order.get("damaged_claim"))
     has_proof = bool(order.get("photo_proof_available"))
     within_window = order.get("delivered_days_ago", 0) <= window_days_for(order)
     used = order.get("condition_claimed") == "used"
     high_value = order.get("price", 0) > config.HIGH_VALUE_THRESHOLD
     gift = order.get("payment_method") == "gift"
     intl = (order.get("country") or "India").lower() != "india"
-    defect = is_defect_claim(message)
+    needs_clarification = bool((intent or {}).get("needs_clarification"))
 
     # Precedence ladder — see refund_policy.md "Decision precedence".
     if cancelled:
@@ -221,16 +280,25 @@ def decide_refund(
     elif abusing:
         decision = "escalated"
     elif damaged:
+        # Damaged on arrival: refundable WITH photo proof, else escalate for review.
         decision = "approved" if has_proof else "escalated"
+    elif defect:
+        # Defect / "not working": never auto-approve. Out of window -> warranty;
+        # in window -> escalate for proof + manual review.
+        decision = "warranty_support" if not within_window else "escalated"
     elif not within_window:
-        decision = "warranty_support" if defect else "denied"
+        decision = "denied"
     elif used:
-        decision = "warranty_support" if defect else "denied"
+        decision = "denied"
     elif high_value:
         decision = "escalated"
     elif gift:
         decision = "store_credit"
     elif intl:
+        decision = "escalated"
+    elif needs_clarification:
+        # Ambiguous request with no actionable signal — escalate (ask to clarify)
+        # rather than blindly approve.
         decision = "escalated"
     else:
         decision = "approved"

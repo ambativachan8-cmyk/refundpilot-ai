@@ -16,6 +16,47 @@ Decision = Literal[
 
 CheckStatus = Literal["success", "warning", "failed"]
 
+IntentType = Literal[
+    "refund_request",
+    "warranty_support",
+    "missing_package",
+    "cancellation_status",
+    "exchange_request",
+    "unknown",
+]
+
+IntentReason = Literal[
+    "clean_return",
+    "defective_or_not_working",
+    "damaged_on_arrival",
+    "changed_mind",
+    "late_delivery",
+    "wrong_item",
+    "missing_package",
+    "final_sale_dispute",
+    "duplicate_refund",
+    "unknown",
+]
+
+
+class RefundIntent(BaseModel):
+    """Structured intent extracted from the customer's message.
+
+    Produced by the LLM when OPENAI_API_KEY is set, otherwise by a deterministic
+    keyword extractor. This NEVER decides the refund outcome — it only describes
+    what the customer is asking for so the policy engine can validate it.
+    """
+    intent_type: IntentType = "refund_request"
+    reason: IntentReason = "unknown"
+    product_condition_claimed: Literal["unused", "used", "damaged", "defective", "unknown"] = "unknown"
+    proof_mentioned: bool = False
+    order_id_mentioned: Optional[str] = None
+    urgency_or_sentiment: Literal["calm", "frustrated", "angry", "unknown"] = "unknown"
+    needs_clarification: bool = False
+    clarification_question: Optional[str] = None
+    confidence: float = 0.5
+    evidence_phrases: list[str] = []
+
 
 class Customer(BaseModel):
     customer_id: str
@@ -73,6 +114,8 @@ class ChatResponse(BaseModel):
     session_id: str
     decision: Decision
     response: str
+    intent: Optional[RefundIntent] = None
+    intent_method: str = "fallback"  # "llm" or "fallback"
     customer: Optional[Customer] = None
     order: Optional[Order] = None
     policy_checks: list[PolicyCheck] = []

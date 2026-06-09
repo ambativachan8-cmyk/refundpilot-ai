@@ -6,9 +6,9 @@ sequential orchestrator runs the *same* node functions — so behaviour and the
 audit logs are identical either way.
 
 Nodes:
-  receive_request -> identify_customer -> fetch_customer -> fetch_order
-  -> read_policy -> run_policy_checks -> decide -> generate_response
-  -> persist_logs ; with handle_error as the failure branch.
+  receive_request -> extract_intent -> identify_customer -> fetch_customer
+  -> fetch_order -> read_policy -> run_policy_checks -> decide
+  -> generate_response -> persist_logs ; with handle_error as the failure branch.
 """
 from __future__ import annotations
 
@@ -48,6 +48,22 @@ def node_receive_request(state: AgentState) -> dict[str, Any]:
         f"message='{state.get('user_message', '')[:80]}'",
     )
     upd["retry_count"] = state.get("retry_count", 0)
+    return upd
+
+
+def node_extract_intent(state: AgentState) -> dict[str, Any]:
+    message = state.get("user_message", "")
+    intent, method, note = tools.extract_intent(message)
+    status = "warning" if intent.get("needs_clarification") else "success"
+    summary = (
+        f"type={intent.get('intent_type')} reason={intent.get('reason')} "
+        f"condition={intent.get('product_condition_claimed')} "
+        f"proof={intent.get('proof_mentioned')} conf={intent.get('confidence')}"
+    )
+    upd = _log(state, "extract_intent", "extract_intent",
+               f"method={method} ({note})", summary, status=status)
+    upd["intent"] = intent
+    upd["intent_method"] = method
     return upd
 
 
@@ -107,7 +123,9 @@ def node_read_policy(state: AgentState) -> dict[str, Any]:
 def node_run_policy_checks(state: AgentState) -> dict[str, Any]:
     customer = state["customer"]
     order = state["order"]
-    decision, checks = tools.run_decision(customer, order, state.get("user_message", ""))
+    decision, checks = tools.run_decision(
+        customer, order, state.get("user_message", ""), state.get("intent")
+    )
     # Log each individual policy check for the audit trail.
     logs = list(state.get("logs", []))
     calls = list(state.get("tool_calls", []))
@@ -140,6 +158,7 @@ def node_generate_response(state: AgentState) -> dict[str, Any]:
     response, mode = decisions.generate_response(
         decision, state["customer"], state["order"],
         state.get("policy_checks", []), state.get("user_message", ""),
+        state.get("intent"),
     )
     upd = _log(state, "generate_response", "generate_response",
                f"mode={mode}", f"Generated {len(response)}-char reply",
@@ -186,6 +205,7 @@ def _route_after_order(state: AgentState) -> str:
 def _build_langgraph():  # pragma: no cover - exercised only when installed
     g = StateGraph(AgentState)
     g.add_node("receive_request", node_receive_request)
+    g.add_node("extract_intent", node_extract_intent)
     g.add_node("identify_customer", node_identify_customer)
     g.add_node("fetch_customer", node_fetch_customer)
     g.add_node("fetch_order", node_fetch_order)
@@ -197,7 +217,8 @@ def _build_langgraph():  # pragma: no cover - exercised only when installed
     g.add_node("handle_error", node_handle_error)
 
     g.set_entry_point("receive_request")
-    g.add_edge("receive_request", "identify_customer")
+    g.add_edge("receive_request", "extract_intent")
+    g.add_edge("extract_intent", "identify_customer")
     g.add_conditional_edges("identify_customer", _route_after_customer,
                             {"handle_error": "handle_error", "fetch_customer": "fetch_customer"})
     g.add_edge("fetch_customer", "fetch_order")
@@ -221,6 +242,7 @@ def _run_sequential(state: AgentState) -> AgentState:
         state.update(node(state))
 
     apply(node_receive_request)
+    apply(node_extract_intent)
     apply(node_identify_customer)
     if state.get("error"):
         apply(node_handle_error)
@@ -252,6 +274,8 @@ def run_agent(
         "user_message": message,
         "selected_customer_id": customer_id,
         "detected_order_id": order_id,
+        "intent": None,
+        "intent_method": "fallback",
         "policy_checks": [],
         "tool_calls": [],
         "logs": [],

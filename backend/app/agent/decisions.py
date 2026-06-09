@@ -42,11 +42,17 @@ def _alternative_for(decision: str) -> str:
 
 
 def template_response(
-    decision: str, customer: dict[str, Any], order: dict[str, Any]
+    decision: str,
+    customer: dict[str, Any],
+    order: dict[str, Any],
+    intent: dict[str, Any] | None = None,
 ) -> str:
     name = customer.get("name", "there").split(" ")[0]
     product = order.get("product_name", "your item")
     partial = order.get("condition_claimed") == "partial"
+    intent = intent or {}
+    is_defect = intent.get("reason") == "defective_or_not_working"
+    needs_clarification = bool(intent.get("needs_clarification"))
 
     if decision == "approved" and partial:
         return (
@@ -66,6 +72,20 @@ def template_response(
             f"Hi {name}, I'm sorry, but I can't process a refund for the {product} "
             "because it falls outside our refund policy. I'd be glad to help you "
             "explore warranty support or other options if the product has a defect."
+        )
+    if decision == "escalated" and is_defect:
+        return (
+            f"Hi {name}, I can't approve this refund immediately because it's based "
+            f"on a defect claim for the {product}, and that requires proof or a "
+            "manual review. Please upload a photo or short video showing the issue, "
+            "and our support team will review it and follow up."
+        )
+    if decision == "escalated" and needs_clarification:
+        return (
+            f"Hi {name}, I want to make sure I help with the right order. "
+            + (intent.get("clarification_question") or
+               "Could you tell me which item this is about and whether it's unused, "
+               "damaged, or not working?")
         )
     if decision == "escalated":
         return (
@@ -147,7 +167,8 @@ def generate_response(
     order: dict[str, Any],
     checks: list[dict[str, Any]],
     message: str,
+    intent: dict[str, Any] | None = None,
 ) -> tuple[str, str]:
     """Return (customer_response, llm_mode)."""
-    base = template_response(decision, customer, order)
+    base = template_response(decision, customer, order, intent)
     return _maybe_llm_rephrase(base, decision, customer, order, checks, message)

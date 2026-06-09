@@ -91,6 +91,8 @@ def chat(req: ChatRequest) -> ChatResponse:
         session_id=session_id,
         decision=result.get("decision", "escalated"),
         response=result.get("customer_response", ""),
+        intent=result.get("intent"),
+        intent_method=result.get("intent_method", "fallback"),
         customer=result.get("customer"),
         order=result.get("order"),
         policy_checks=result.get("policy_checks", []),
