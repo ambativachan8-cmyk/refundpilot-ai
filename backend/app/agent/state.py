@@ -13,6 +13,7 @@ class AgentState(TypedDict, total=False):
     req_proof_unavailable: bool
     intent: Optional[dict[str, Any]]
     intent_method: str
+    message_intent: str
     prior_session: Optional[dict[str, Any]]
     stage: str
     pending_requirement: str

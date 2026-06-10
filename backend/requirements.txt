@@ -11,8 +11,10 @@ loguru
 langgraph
 langchain-core
 
-# LLM (optional). The app runs fully without an API key in deterministic mode.
+# LLM (optional). The app runs fully without any provider in deterministic mode.
+# OpenAI (cloud) and/or local Ollama (via its HTTP API using requests).
 openai
+requests
 
 # Testing
 pytest

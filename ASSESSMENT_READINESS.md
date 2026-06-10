@@ -28,7 +28,15 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
   manual review); anti-loop stops repeated proof requests. Only explicit signals
   count — a bare "photo" mention does not.
 - ✅ **Scenario QA harness** — `scripts/manual_qa_matrix.py` (readable table) +
-  `tests/test_support_workflow_matrix.py` (~15 flows as assertions).
+  `tests/test_support_workflow_matrix.py` (multi-turn flows as assertions).
+- ✅ **Conversation intelligence** — `classify_message` labels follow-ups
+  (timeline/status/pressure/next-step/thanks/repeat-defect). On a settled/waiting
+  case the agent answers the question without re-deciding, so it no longer repeats
+  the same escalation text.
+- ✅ **LLM providers** — `LLM_PROVIDER` = auto/openai/**ollama**/none. Local Ollama
+  works offline with no key; every call is timed and falls back safely. `/health`
+  shows `llm_provider`, `llm_model`, `ollama_reachable`. The LLM never decides
+  outcomes; precise operational/follow-up replies are kept verbatim.
 - ✅ Failures / warnings / ambiguous cases visible (missing order → `handle_error`
   failed log; ambiguous order → warning; defect-no-proof → warning).
 
@@ -80,8 +88,9 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
 | 17 | **Defect → "I cannot provide proof" (same session)** | **not approved** | `test_agent` |
 | 18 | **Clarify ("return my product") → then "unused, 5 days"** | escalated → approved | `test_agent` |
 
-**Verification:** `pytest` → 59 passed · `manual_qa_matrix.py` → 18/18 checks pass ·
-`npx tsc --noEmit` clean · `npm run build` clean · live HTTP smoke confirms the
-proof-attached and proof-unavailable buttons both route to `under_manual_review`
-(never auto-approved), clean return approves, clarify-then-approve works, and
-CUST-002 is denied.
+**Verification:** `pytest` → 60 passed · `manual_qa_matrix.py` → 24/24 checks pass ·
+`npx tsc --noEmit` clean · `npm run build` clean · live HTTP smoke (Ollama active,
+`provider=ollama`, `qwen2.5:3b`) confirms: clean approval + "how much time?" →
+refund timeline (not repeated); defect + proof attached + "how long?" → manual-review
+timeline (24–48h); pressure → holds the line. Proof buttons route to
+`under_manual_review`; CUST-002 denied. App also runs fully with `LLM_PROVIDER=none`.

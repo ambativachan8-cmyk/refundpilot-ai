@@ -7,3 +7,4 @@ _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _tmp.close()
 os.environ["REFUNDPILOT_DB"] = _tmp.name
 os.environ.pop("OPENAI_API_KEY", None)  # force deterministic mode in tests
+os.environ["LLM_PROVIDER"] = "none"  # never hit OpenAI/Ollama during tests

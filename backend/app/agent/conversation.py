@@ -21,6 +21,16 @@ def _within_window(order: dict[str, Any]) -> bool:
     return order.get("delivered_days_ago", 0) <= window_days_for(order)
 
 
+SETTLED_STAGES = {
+    "approved", "denied", "under_manual_review",
+    "warranty_support", "store_credit", "already_cancelled",
+}
+FOLLOWUP_INTENTS = {
+    "timeline_question", "status_question", "next_step_question",
+    "pressure_or_manipulation", "thanks_or_acknowledgement", "general_question",
+}
+
+
 def evaluate(
     prior: Optional[dict[str, Any]],
     intent: dict[str, Any],
@@ -28,6 +38,7 @@ def evaluate(
     base_decision: str,
     proof_attached: bool = False,
     proof_unavailable_flag: bool = False,
+    message_intent: str = "unknown",
 ) -> dict[str, Any]:
     """Return the conversation-aware outcome.
 
@@ -65,7 +76,7 @@ def evaluate(
     defect_active = prior_defect or defect_now or base_decision == "warranty_support"
 
     def out(decision, stage, pending, *, proof_required=False,
-            proof_received=False, reason="", clar=None):
+            proof_received=False, reason="", clar=None, followup=None):
         return {
             "decision": decision,
             "stage": stage,
@@ -75,7 +86,30 @@ def evaluate(
             "proof_received": prior_proof_received or proof_received,
             "last_reason": reason,
             "clarification_question": clar,
+            "followup": followup,
         }
+
+    # 0) Continuation of an existing case: answer follow-ups WITHOUT re-deciding.
+    #    (Skip when the customer is supplying new proof signals.)
+    prior_decision = prior.get("last_decision")
+    if prior_decision and not proof_attached and not proof_unavailable:
+        # Conversational follow-up on a settled or waiting case -> keep state.
+        if message_intent in FOLLOWUP_INTENTS and (
+            prior_stage in SETTLED_STAGES or prior_stage == "waiting_for_proof"
+        ):
+            return out(prior_decision, prior_stage,
+                       prior.get("pending_requirement", "none"),
+                       proof_received=prior_proof_received,
+                       reason=f"Follow-up '{message_intent}' — answered without re-deciding.",
+                       followup=message_intent)
+        # Repeated defect / clarification while already under review -> acknowledge.
+        if message_intent in ("defect_claim", "clarification_answer") and prior_stage in (
+            "under_manual_review", "warranty_support"
+        ):
+            return out(prior_decision, prior_stage, "manual_review",
+                       proof_received=prior_proof_received,
+                       reason="Repeated defect/clarification — case already under review.",
+                       followup="repeat_defect")
 
     # 1) Terminal policy outcomes the conversation layer must not loosen.
     if base_decision == "denied":

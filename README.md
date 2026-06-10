@@ -193,8 +193,9 @@ cp .env.example frontend/.env.local   # optional — defaults to localhost:8000
 ## 10. Environment variables
 
 See [`.env.example`](.env.example). All optional. Key ones:
-`OPENAI_API_KEY` (enables LLM phrasing), `OPENAI_MODEL`, `OPENAI_BASE_URL`,
-`REFUNDPILOT_DB`, `NEXT_PUBLIC_API_URL`.
+`LLM_PROVIDER` (`auto`/`openai`/`ollama`/`none`), `OPENAI_API_KEY`, `OPENAI_MODEL`,
+`OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `LLM_TIMEOUT_SECONDS`, `REFUNDPILOT_DB`,
+`NEXT_PUBLIC_API_URL`.
 
 ## 11. Run the backend
 
@@ -221,7 +222,7 @@ App at http://localhost:3000 (chat) and http://localhost:3000/admin (logs).
 
 ```bash
 cd backend
-pytest                 # 59 tests: policy, intent, multi-turn conversation, scenario matrix
+pytest                 # 60 tests: policy, intent, multi-turn conversation, scenario matrix
 ```
 
 **Scenario QA matrix** — a readable pass/fail sweep of ~15 realistic conversations
@@ -279,22 +280,44 @@ npm run build          # production build
 
 ---
 
-## 16. LLM behaviour & fallback mode
+## 16. LLM behaviour, providers & fallback mode
 
-The LLM is used in **two** places, and in neither does it decide the outcome:
+The LLM is used only for **language understanding and phrasing** — it never decides
+the outcome:
 
-1. **Intent extraction (`extract_intent`)** — interprets the customer's message into
-   a structured `RefundIntent` (intent type, reason, claimed condition, proof
-   mentioned, sentiment, confidence). With `OPENAI_API_KEY` set it calls an
-   OpenAI-compatible model with JSON output; otherwise a deterministic keyword
-   extractor runs. The admin log shows `method=llm` or `method=fallback`.
-2. **Response phrasing (`generate_response`)** — rewrites the pre-computed reply
-   into warmer wording. Any LLM error silently falls back to the template.
+1. **Message-intent classification (`classify_message`)** — labels each message
+   (timeline_question, status_question, pressure, defect_claim, proof_attached, …)
+   so follow-ups are answered naturally instead of repeating the decision.
+2. **Refund-intent extraction (`extract_intent`)** — structured `RefundIntent`.
+3. **Response phrasing** — adds natural variety to the *simple* initial decision
+   replies. Precise operational/follow-up replies (timelines, proof steps) are kept
+   verbatim so a small local model can't drop specifics.
+
+### Providers (`LLM_PROVIDER`)
+
+| Value | Behaviour |
+|---|---|
+| `auto` (default) | Use OpenAI if `OPENAI_API_KEY` is set, else local **Ollama** if reachable, else deterministic |
+| `openai` | OpenAI (cloud); requires `OPENAI_API_KEY` |
+| `ollama` | **Local Ollama** — no key, no internet |
+| `none` | Always deterministic |
+
+**Run with local Ollama (no key, offline):**
+```bash
+ollama serve              # if not already running
+ollama pull qwen2.5:3b    # one-time
+# backend/.env:  LLM_PROVIDER=ollama   OLLAMA_MODEL=qwen2.5:3b
+```
+
+Every LLM call is **best-effort with a timeout**: if the provider is down, slow, or
+returns invalid JSON, the agent logs a fallback and continues deterministically — it
+never crashes or hangs. `GET /health` reports `llm_enabled`, `llm_provider`,
+`llm_model`, and `ollama_reachable`. `/chat` returns `intent_method` and `message_intent`.
 
 So:
-- **No `OPENAI_API_KEY`** → fully deterministic (keyword intent + templated replies); the demo works end-to-end.
-- **With key** → same decisions, smarter intent parsing and warmer wording.
-- `GET /health` shows `llm_enabled`; `/chat` returns `intent_method` and `llm_mode`.
+- **No key, no Ollama** → fully deterministic (keyword intent + templated replies); the demo works end-to-end.
+- **Ollama running** → natural message understanding + phrasing, same decisions.
+- **OpenAI key** → same, using the cloud model.
 
 ### Multi-turn conversation state
 

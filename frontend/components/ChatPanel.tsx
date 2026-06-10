@@ -24,6 +24,20 @@ const STAGE_LABEL: Partial<Record<Stage, string>> = {
   warranty_support: "Warranty support",
 };
 
+const STAGE_META: Record<Stage, { label: string; eta: string; next: string }> = {
+  new_request: { label: "New request", eta: "—", next: "Describe your request" },
+  needs_clarification: { label: "Needs clarification", eta: "—", next: "Clarify item & condition" },
+  waiting_for_proof: { label: "Waiting for proof", eta: "—", next: "Attach proof or mark unavailable" },
+  proof_received: { label: "Proof received", eta: "24–48 hours", next: "Support team validation" },
+  under_manual_review: { label: "Under manual review", eta: "24–48 hours", next: "Support team validation" },
+  approved: { label: "Approved", eta: "3–5 business days after inspection", next: "Pickup & inspection" },
+  denied: { label: "Denied", eta: "—", next: "Warranty support if defective" },
+  escalated: { label: "Escalated", eta: "~24 hours", next: "Human agent review" },
+  warranty_support: { label: "Warranty support", eta: "varies", next: "Warranty team validation" },
+  store_credit: { label: "Store credit", eta: "—", next: "Issue store credit" },
+  already_cancelled: { label: "Already cancelled", eta: "—", next: "No action needed" },
+};
+
 export function ChatPanel({
   customerId,
   injected,
@@ -145,6 +159,33 @@ export function ChatPanel({
           </button>
         </div>
       </div>
+
+      {/* compact case-status bar */}
+      {stage && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-white/10 bg-white/[0.02] px-4 py-2 text-[11px]">
+          <span className="text-slate-400">
+            Status: <span className="font-medium text-slate-200">{STAGE_META[stage]?.label ?? stage}</span>
+          </span>
+          <span className="text-slate-400">
+            Proof:{" "}
+            <span className="font-medium text-slate-200">
+              {proofState === "attached"
+                ? "Received"
+                : proofState === "unavailable"
+                ? "Unavailable"
+                : stage === "waiting_for_proof"
+                ? "Requested"
+                : "—"}
+            </span>
+          </span>
+          <span className="text-slate-400">
+            Next: <span className="font-medium text-slate-200">{STAGE_META[stage]?.next}</span>
+          </span>
+          <span className="text-slate-400">
+            ETA: <span className="font-medium text-slate-200">{STAGE_META[stage]?.eta}</span>
+          </span>
+        </div>
+      )}
 
       {/* messages */}
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">

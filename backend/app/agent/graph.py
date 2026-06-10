@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from .. import database
-from . import conversation, decisions, tools
+from . import conversation, decisions, message_intent as msgintent, tools
 from .state import AgentState
 
 # Detect LangGraph availability once at import time.
@@ -93,6 +93,21 @@ def node_extract_intent(state: AgentState) -> dict[str, Any]:
                f"method={method} ({note})", summary, status=status)
     upd["intent"] = intent
     upd["intent_method"] = method
+    return upd
+
+
+def node_classify_message(state: AgentState) -> dict[str, Any]:
+    prior = state.get("prior_session") or {}
+    mi, method = msgintent.classify_message_intent(
+        state.get("user_message", ""),
+        proof_attached=bool(state.get("req_proof_attached")),
+        proof_unavailable=bool(state.get("req_proof_unavailable")),
+        prior_stage=prior.get("stage"),
+    )
+    upd = _log(state, "classify_message", "classify_message_intent",
+               f"method={method} prior_stage={prior.get('stage')}",
+               f"message_intent={mi}")
+    upd["message_intent"] = mi
     return upd
 
 
@@ -190,6 +205,7 @@ def node_evaluate_state(state: AgentState) -> dict[str, Any]:
         state["order"], base,
         proof_attached=bool(state.get("req_proof_attached")),
         proof_unavailable_flag=bool(state.get("req_proof_unavailable")),
+        message_intent=state.get("message_intent", "unknown"),
     )
     changed = " (overridden by conversation state)" if conv["decision"] != base else ""
     upd = _log(state, "evaluate_conversation_state", "evaluate_conversation_state",
@@ -208,12 +224,13 @@ def node_evaluate_state(state: AgentState) -> dict[str, Any]:
 
 def node_generate_response(state: AgentState) -> dict[str, Any]:
     decision = state.get("decision", "escalated")
-    proof_received = bool((state.get("conv") or {}).get("proof_received"))
+    conv = state.get("conv") or {}
+    proof_received = bool(conv.get("proof_received"))
     response, mode = decisions.generate_response(
         decision, state["customer"], state["order"],
         state.get("policy_checks", []), state.get("user_message", ""),
         state.get("intent"), state.get("stage"), state.get("pending_requirement"),
-        proof_received,
+        proof_received, conv.get("followup"), state.get("message_intent"),
     )
     upd = _log(state, "generate_response", "generate_response",
                f"mode={mode}", f"Generated {len(response)}-char reply",
@@ -289,6 +306,7 @@ def _build_langgraph():  # pragma: no cover - exercised only when installed
     g.add_node("receive_request", node_receive_request)
     g.add_node("load_session_state", node_load_session)
     g.add_node("extract_intent", node_extract_intent)
+    g.add_node("classify_message", node_classify_message)
     g.add_node("identify_customer", node_identify_customer)
     g.add_node("fetch_customer", node_fetch_customer)
     g.add_node("fetch_order", node_fetch_order)
@@ -304,7 +322,8 @@ def _build_langgraph():  # pragma: no cover - exercised only when installed
     g.set_entry_point("receive_request")
     g.add_edge("receive_request", "load_session_state")
     g.add_edge("load_session_state", "extract_intent")
-    g.add_edge("extract_intent", "identify_customer")
+    g.add_edge("extract_intent", "classify_message")
+    g.add_edge("classify_message", "identify_customer")
     g.add_conditional_edges("identify_customer", _route_after_customer,
                             {"handle_error": "handle_error", "fetch_customer": "fetch_customer"})
     g.add_edge("fetch_customer", "fetch_order")
@@ -332,6 +351,7 @@ def _run_sequential(state: AgentState) -> AgentState:
     apply(node_receive_request)
     apply(node_load_session)
     apply(node_extract_intent)
+    apply(node_classify_message)
     apply(node_identify_customer)
     if state.get("error"):
         apply(node_handle_error)
@@ -373,6 +393,7 @@ def run_agent(
         "req_proof_unavailable": proof_unavailable,
         "intent": None,
         "intent_method": "fallback",
+        "message_intent": "unknown",
         "prior_session": None,
         "stage": "new_request",
         "pending_requirement": "none",

@@ -150,6 +150,7 @@ class ChatResponse(BaseModel):
     response: str
     intent: Optional[RefundIntent] = None
     intent_method: str = "fallback"  # "llm" or "fallback"
+    message_intent: str = "unknown"
     customer: Optional[Customer] = None
     order: Optional[Order] = None
     policy_checks: list[PolicyCheck] = []
@@ -161,6 +162,9 @@ class HealthResponse(BaseModel):
     status: str
     app: str
     llm_enabled: bool
+    llm_provider: str = "none"
+    llm_model: Optional[str] = None
+    ollama_reachable: Optional[bool] = None
     orchestrator: str
     customers: int
     orders: int

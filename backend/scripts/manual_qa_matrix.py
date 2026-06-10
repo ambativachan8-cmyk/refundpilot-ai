@@ -17,6 +17,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _tmp.close()
 os.environ["REFUNDPILOT_DB"] = _tmp.name
+# Deterministic by default so the matrix is a reliable gate. Override by exporting
+# LLM_PROVIDER before running if you want to exercise OpenAI/Ollama live.
+os.environ.setdefault("LLM_PROVIDER", "none")
 
 from app import database, qa  # noqa: E402
 

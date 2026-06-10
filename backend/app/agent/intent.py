@@ -193,40 +193,26 @@ def fallback_extract(message: str) -> dict[str, Any]:
     }
 
 
-def _llm_extract(message: str) -> dict[str, Any]:
-    """Extract intent via an OpenAI-compatible chat model returning JSON.
-
-    Raises on any failure so the caller can fall back deterministically.
-    """
-    from openai import OpenAI
-
-    client = OpenAI(api_key=config.OPENAI_API_KEY, base_url=config.OPENAI_BASE_URL)
-    resp = client.chat.completions.create(
-        model=config.OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": prompts.INTENT_SYSTEM_PROMPT},
-            {"role": "user", "content": prompts.INTENT_USER_TEMPLATE.format(message=message)},
-        ],
-        temperature=0,
-        max_tokens=300,
-        response_format={"type": "json_object"},
-    )
-    raw = resp.choices[0].message.content or "{}"
-    data = json.loads(raw)
-    # Validate/coerce through the Pydantic model, then dump back to a plain dict.
-    return RefundIntent.model_validate(data).model_dump()
-
-
 def extract_intent(message: str) -> tuple[dict[str, Any], str, str]:
     """Return (intent_dict, method, note).
 
-    method: "llm" or "fallback". note: short reason (e.g. fallback cause).
+    method: "llm" or "fallback". note: short reason (e.g. fallback cause / provider).
+    Uses the active provider (OpenAI or Ollama) when available, otherwise the
+    deterministic keyword extractor. Any LLM failure falls back silently.
     """
-    if config.LLM_ENABLED:
-        try:
-            intent = _llm_extract(message)
-            return intent, "llm", "structured LLM extraction"
-        except Exception as exc:  # noqa: BLE001 - never break the demo
-            fb = fallback_extract(message)
-            return fb, "fallback", f"llm_error: {type(exc).__name__}"
-    return fallback_extract(message), "fallback", "no OPENAI_API_KEY — keyword extraction"
+    from .. import llm
+
+    if llm.is_enabled():
+        data = llm.call_json(
+            prompts.INTENT_SYSTEM_PROMPT,
+            prompts.INTENT_USER_TEMPLATE.format(message=message),
+            max_tokens=300,
+        )
+        if data is not None:
+            try:
+                intent = RefundIntent.model_validate(data).model_dump()
+                return intent, "llm", f"structured extraction ({llm.resolve_provider()})"
+            except Exception:  # noqa: BLE001 - malformed LLM JSON -> fall back
+                pass
+        return fallback_extract(message), "fallback", "llm unavailable/invalid — keyword extraction"
+    return fallback_extract(message), "fallback", "no LLM provider — keyword extraction"

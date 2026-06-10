@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import config, database, policy
+from . import config, database, llm, policy
 from .agent import graph
 from .schemas import (
     ChatRequest,
@@ -47,10 +47,14 @@ app.add_middleware(
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
+    s = llm.get_llm_status()
     return HealthResponse(
         status="ok",
         app=config.APP_NAME,
-        llm_enabled=config.LLM_ENABLED,
+        llm_enabled=s["enabled"],
+        llm_provider=s["provider"],
+        llm_model=s["model"],
+        ollama_reachable=s["ollama_reachable"],
         orchestrator=graph.ORCHESTRATOR,
         customers=len(database.get_customers()),
         orders=len(database.get_orders()),
@@ -99,6 +103,7 @@ def chat(req: ChatRequest) -> ChatResponse:
         response=result.get("customer_response", ""),
         intent=result.get("intent"),
         intent_method=result.get("intent_method", "fallback"),
+        message_intent=result.get("message_intent", "unknown"),
         customer=result.get("customer"),
         order=result.get("order"),
         policy_checks=result.get("policy_checks", []),

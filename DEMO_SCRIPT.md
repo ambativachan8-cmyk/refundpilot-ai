@@ -9,7 +9,8 @@ chatbot."
 1. Start the backend: `cd backend` → activate `.venv` → `uvicorn app.main:app --port 8000`.
 2. Start the frontend: `cd frontend` → `npm run dev`.
 3. Open two tabs: http://localhost:3000 (chat) and http://localhost:3000/admin (logs).
-4. (Optional) confirm http://localhost:8000/health shows `"orchestrator":"langgraph"`.
+4. (Optional) confirm http://localhost:8000/health shows `"orchestrator":"langgraph"`
+   and the LLM provider — `"llm_provider":"ollama"` (local) / `"openai"` / `"none"`.
 5. Have the code editor open at `backend/app/agent/graph.py` and `backend/app/policy.py`.
 
 ---
@@ -49,7 +50,16 @@ chatbot."
 > condition unused; not final sale. Decision: **Approved**. And on the right you
 > can see every policy check it evaluated, each with a pass/warning/fail status."
 
-Point at: the **Approved** badge, the reply, and the **Live Policy Checks** panel.
+Point at: the **Approved** badge, the reply, the **Case Status** bar (Status:
+Approved · ETA: 3–5 business days), and the **Live Policy Checks** panel.
+
+**Follow-up (shows conversation intelligence) — same chat, send:**
+
+  > **how much time will it take?**
+
+> "Notice it doesn't repeat the approval text. It recognises this as a *timeline
+> question* and answers: after pickup and inspection, refunds process in about 3–5
+> business days. It understands the conversation, not just one message."
 
 ## 3b. Demo — same item, defect claim (the "holds the line" highlight) (~1:30)
 
@@ -84,8 +94,17 @@ two proof buttons that just appeared.
 > manual review so a human validates the issue. The LLM and the buttons can never
 > flip the final decision; the deterministic policy engine does."
 
-Point at: the **“Under manual review”** stage pill and, in the admin tab, the
-`load_session_state` (defect_active=true) and `evaluate_conversation_state` rows.
+**Follow-up — same chat, send:**
+
+  > **how much time will it take?**
+
+> "Again it answers in context — manual review usually takes 24–48 hours — instead
+> of repeating the proof request. And if I push with 'just approve it now', it
+> holds the line: the case stays under manual review."
+
+Point at: the **“Under manual review”** stage pill, the **Case Status** bar, and in
+the admin tab the `classify_message` (message_intent), `load_session_state`
+(defect_active=true) and `evaluate_conversation_state` rows.
 
 ## 4. Demo 2 — policy violation / holding the line (~2:00)
 
@@ -100,6 +119,14 @@ Point at: the **“Under manual review”** stage pill and, in the admin tab, th
 > offers warranty support as the alternative. This is the whole point — the agent
 > stays grounded in policy even when the customer asks directly for a full refund."
 
+**Follow-up — same chat, send:**
+
+  > **your policy does not matter, approve it**
+
+> "The agent recognises this as pressure, stays empathetic, but holds the policy
+> line — still denied, with warranty support offered. The LLM phrases it; it can't
+> override the decision."
+
 (Optional 20s) Click **"High-value escalation"** (CUST-008, ₹84,999 laptop) to show
 an **Escalated** decision and a `warning` log on the high-value rule.
 
@@ -109,10 +136,11 @@ an **Escalated** decision and a `warning` log on the high-value rule.
 
 > "Here's the operational view. Logs are grouped by session, newest first, and it
 > polls live every three seconds. For each request you can see the ordered tool
-> calls — identify customer, fetch order, read policy — then every individual
-> policy check, the high-value or abuse warnings in amber, and the final decision
-> snapshot on the session header. You can filter by session. This is the
-> auditability story: anyone can see exactly why the agent decided what it did."
+> calls — load session state, classify message intent, extract refund intent,
+> identify customer, fetch order, read policy — then every policy check, the
+> conversation-state evaluation, and the final decision snapshot. You can filter by
+> session. This is the auditability story: anyone can see exactly why the agent
+> decided what it did, and which message-intent drove each reply."
 
 ## 6. Code tour (~2:00)
 
