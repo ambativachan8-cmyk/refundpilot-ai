@@ -106,7 +106,8 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
 | 17 | **Defect → "I cannot provide proof" (same session)** | **not approved** | `test_agent` |
 | 18 | **Clarify ("return my product") → then "unused, 5 days"** | escalated → approved | `test_agent` |
 
-**Verification:** `pytest` → 74 passed · `manual_qa_matrix.py` → 61/61 checks pass ·
+**Verification:** `pytest` → 76 passed · `manual_qa_matrix.py` → 69/69 checks pass ·
+`simulate_customer_conversations.py` → 69/69 turns pass (~250ms typical latency) ·
 `npx tsc --noEmit` clean · `npm run build` clean · live HTTP smoke (Ollama active,
 `provider=ollama`, `qwen2.5:3b`) confirms: clean approval + "how much time?" →
 refund timeline (not repeated); defect + proof attached + "how long?" → manual-review

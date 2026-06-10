@@ -168,9 +168,12 @@ an **Escalated** decision and a `warning` log on the high-value rule.
   properly" (delivered 40 days ago → warranty), then:
   > **how many days was the refund window?**
   → "It answers the *policy* question — 30 days standard / 15 days electronics, and
-  this order is outside its window — instead of giving a review timeline. And an
-  'am I eligible…?' question gets a conditional eligibility answer based on the case
-  stage. Every one of these replies came back in well under a second; the admin log
+  this order is outside its window — instead of giving a review timeline. An
+  'am I eligible…?' question gets a conditional, window-aware eligibility answer,
+  'refund or warranty?' is answered from the window + verification rules, and
+  **'will I get an email?'** cites the customer's CRM email and honestly notes the
+  notification is simulated (with a `notification_simulated` entry in the admin
+  log). Every one of these replies came back in well under a second; the admin log
   shows a `timing` entry per request."
 
 ## 5. Admin logs walkthrough (~1:00)

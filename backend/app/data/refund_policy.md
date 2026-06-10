@@ -52,6 +52,13 @@ rule it checks**.
 19. **LLM cannot override policy.** The LLM only interprets language and phrases
     replies. Every refund decision is made by this deterministic policy engine; the
     LLM can never approve, deny, or invent an exception.
+20. **Claim reporting deadline.** Refund, return, or damage claims must be raised
+    within the applicable refund window — **30 days** from delivery for standard
+    items, **15 days** for electronics. Claims raised after the window are handled
+    under **warranty support** (rule 11), not as refunds.
+21. **Case-update notifications.** Customers are notified of review outcomes at the
+    registered email on their CRM profile. In this prototype, email delivery is
+    **simulated** and the update is recorded in the admin reasoning log.
 
 ## Decision precedence (highest first)
 

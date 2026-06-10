@@ -29,7 +29,10 @@ MESSAGE_INTENTS = (
     "process_explanation_question",
     "warranty_question",
     "refund_window_question",
+    "claim_deadline_question",
     "eligibility_question",
+    "refund_vs_warranty_question",
+    "email_notification_question",
     "replacement_question",
     "refund_or_replacement_question",
     "human_agent_request",
@@ -45,7 +48,8 @@ MESSAGE_INTENTS = (
 FOLLOWUP_QUESTION_INTENTS = {
     "timeline_question", "status_question", "next_step_question",
     "approval_owner_question", "process_explanation_question", "warranty_question",
-    "refund_window_question", "eligibility_question",
+    "refund_window_question", "claim_deadline_question", "eligibility_question",
+    "refund_vs_warranty_question", "email_notification_question",
     "replacement_question", "refund_or_replacement_question", "human_agent_request",
     "frustration_or_complaint", "pressure_or_manipulation", "thanks_or_acknowledgement",
     "general_question",
@@ -134,7 +138,31 @@ _REPLACEMENT = re.compile(
     r"want\s+(a\s+)?(replacement|exchange)|send\s+(me\s+)?(a\s+)?(new|replacement)|exchange\s+it)",
     re.IGNORECASE,
 )
-_WARRANTY = re.compile(r"\bwarrant(y|ies)\b", re.IGNORECASE)
+# Typo-tolerant: warranty / warrenty / warrantee.
+_WARRANTY = re.compile(r"\bwarr[ae]nt(y|ies|ee)\b", re.IGNORECASE)
+# "refund or warranty?" — answered from the window + verification rules.
+_REFUND_VS_WARRANTY = re.compile(
+    r"refund\s+or\s+(a\s+)?warr[ae]nt\w*|warr[ae]nt\w*\s+or\s+(a\s+)?refund",
+    re.IGNORECASE,
+)
+# "in how many days should I send/report the issue?" — a claim-DEADLINE question.
+_CLAIM_DEADLINE = re.compile(
+    r"(in|within)\s+how\s+man+y\s+days?\s+(should|do|can|must|need)"
+    r"|when\s+should\s+(i|we)\s+(send|raise|report|claim|file)"
+    r"|deadline\s+(for|to)"
+    r"|how\s+long\s+do\s+(i|we)\s+have\s+to\s+(claim|report|return|raise|send)"
+    r"|(should|must)\s+i\s+(be\s+)?(send|sending|report|reporting|rais\w*).{0,40}(issue|claim|refund|damage)",
+    re.IGNORECASE,
+)
+# "will I get an email / update / notification?"
+_EMAIL_NOTIFY = re.compile(
+    r"will\s+(i|we)\s+(get|receive|be\s+(getting|sent))\s+(an?\s+|the\s+)?(e-?mail|mail|update|notification)"
+    r"|will\s+you\s+(e-?mail|mail|notify|update)\s+(me|us)"
+    r"|where\s+will\s+(i|we)\s+(get|receive)\s+(the\s+)?update"
+    r"|update\s+(by|via|over|through)\s+(e-?mail|mail)"
+    r"|notify\s+me|e-?mail\s+me",
+    re.IGNORECASE,
+)
 _DAMAGE = re.compile(r"\b(damage[sd]?|crack(s|ed)?|broke(n)?|dent(s|ed)?|scratch(ed|es)?|shatter)\b", re.IGNORECASE)
 # "how many days was the refund window?" — a POLICY question, not a timeline one.
 _REFUND_WINDOW = re.compile(
@@ -144,8 +172,9 @@ _REFUND_WINDOW = re.compile(
 )
 # "am I eligible…" — answered conditionally from policy + case stage.
 _ELIGIBILITY = re.compile(
-    r"(am|are)\s+(i|we)\s+(still\s+)?eligible|eligib(le|ility)\s+for|do\s+(i|we)\s+qualify"
-    r"|will\s+(i|we)\s+(be\s+eligible|qualify)|can\s+(i|we)\s+(still\s+)?(get|claim)\s+(a\s+|the\s+|my\s+)?refund",
+    # eligib\w* tolerates "eligibile"/"elegible"-style typos on the suffix.
+    r"(am|are)\s+(i|we)\s+(still\s+)?(eligib|elegib)\w*|(eligib|elegib)\w*\s+for|do\s+(i|we)\s+qualify"
+    r"|will\s+(i|we)\s+(be\s+(eligib|elegib)\w*|qualify)|can\s+(i|we)\s+(still\s+)?(get|claim)\s+(a\s+|the\s+|my\s+)?refund",
     re.IGNORECASE,
 )
 _REFUND = re.compile(r"\b(refund|return|money\s+back|reimburse)\b", re.IGNORECASE)
@@ -180,20 +209,30 @@ def classify_keyword(
         return "approval_owner_question"
     if _PROCESS.search(m):
         return "process_explanation_question"
+    # "refund or warranty?" outranks the bare warranty/eligibility keywords.
+    if _REFUND_VS_WARRANTY.search(m):
+        return "refund_vs_warranty_question"
     if _REFUND_OR_REPLACEMENT.search(m):
         return "refund_or_replacement_question"
     if _REPLACEMENT.search(m):
         return "replacement_question"
-    if _WARRANTY.search(m):
-        return "warranty_question"
-    # Policy questions outrank timeline ("how many days was the refund WINDOW?")
+    # Policy questions outrank timeline ("how many days was the refund WINDOW?"),
+    # eligibility ("in how many days should I send the issue to be ELIGIBLE?"),
     # and the defect keyword ("am I eligible if it's really DEFECTIVE?").
     if _REFUND_WINDOW.search(m):
         return "refund_window_question"
+    if _CLAIM_DEADLINE.search(m):
+        return "claim_deadline_question"
+    if _EMAIL_NOTIFY.search(m):
+        return "email_notification_question"
     if _ELIGIBILITY.search(m):
         return "eligibility_question"
+    # Timeline before the bare "warranty" keyword, so "how many days will
+    # warranty take?" gets the warranty TIMELINE, not the routing text.
     if _TIMELINE.search(m):
         return "timeline_question"
+    if _WARRANTY.search(m):
+        return "warranty_question"
     if _STATUS.search(m):
         return "status_question"
     if _NEXT_STEP.search(m):

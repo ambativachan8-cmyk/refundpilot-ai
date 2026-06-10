@@ -306,6 +306,38 @@ FLOWS: list[dict[str, Any]] = [
              "decision_in": {"approved"}, "response_contains": ["record"]},
         ],
     },
+    # --- Latest live transcript (set 4: deadline / email / refund-vs-warranty) ---
+    {
+        "name": "Headphones: claim deadline + email + refund-vs-warranty",
+        "customer": "CUST-001",
+        "turns": [
+            {"msg": "i want to return my headphones", "not_approved": True},
+            {"msg": "damaged", "not_approved": True,
+             "stage_in": {"waiting_for_proof", "under_manual_review"}},
+            {"msg": "i think the damage is internal", "not_approved": True,
+             "stage_in": {"under_manual_review", "warranty_support"}},
+            {"msg": "in how many days should i be sending the issue inorder to be eligible for the refund?",
+             "not_approved": True, "intent_in": {"claim_deadline_question"},
+             "response_contains": ["15 days", "5 days"],
+             "response_not_contains": ["timeline, status, or next steps"]},
+            {"msg": "will i get an email ?", "not_approved": True,
+             "intent_in": {"email_notification_question"},
+             "response_contains": ["email", "simulated"],
+             "response_not_contains": ["timeline, status, or next steps"]},
+            {"msg": "consider its internally damaged am i eligible for refund or warrenty ?",
+             "not_approved": True, "intent_in": {"refund_vs_warranty_question"},
+             "response_contains": ["warranty", "window"]},
+        ],
+    },
+    {
+        "name": "Warranty: 'how many days will warranty take?' gives the timeline",
+        "customer": "CUST-014",
+        "turns": [
+            {"msg": "the coffee machine is not working", "decision_in": {"warranty_support"}},
+            {"msg": "how many days will warranty take?", "decision_in": {"warranty_support"},
+             "intent_in": {"timeline_question"}, "response_contains": ["business days"]},
+        ],
+    },
 ]
 
 
@@ -319,6 +351,7 @@ def run_turn(session_id: str, customer: str, turn: dict[str, Any]) -> dict[str, 
         "decision": state.get("decision"),
         "stage": state.get("stage"),
         "pending": state.get("pending_requirement"),
+        "message_intent": state.get("message_intent"),
         "response": state.get("customer_response", ""),
     }
 
@@ -331,6 +364,8 @@ def check_turn(turn: dict[str, Any], result: dict[str, Any]) -> Optional[str]:
         return f"decision {result['decision']} not in {sorted(turn['decision_in'])}"
     if "stage_in" in turn and result["stage"] not in turn["stage_in"]:
         return f"stage {result['stage']} not in {sorted(turn['stage_in'])}"
+    if "intent_in" in turn and result.get("message_intent") not in turn["intent_in"]:
+        return f"message_intent {result.get('message_intent')} not in {sorted(turn['intent_in'])}"
     reply = (result.get("response") or "").lower()
     for sub in turn.get("response_contains", []):
         if sub.lower() not in reply:

@@ -99,38 +99,46 @@ def evaluate(
     #    re-running the decision ladder.
     prior_decision = prior.get("last_decision")
     active_case = prior_stage in SETTLED_STAGES or prior_stage == "waiting_for_proof"
-    proof_now = (
-        proof_attached or message_intent == "proof_attached" or bool(intent.get("proof_mentioned"))
-    )
-    proof_gone = (
-        proof_unavailable or message_intent == "proof_unavailable"
-        or bool(intent.get("proof_unavailable"))
-    )
-    if prior_decision and active_case:
-        # Proof attached (button OR typed) -> record it; never repeat "not visible".
-        if proof_now:
-            return out("escalated", "under_manual_review", "manual_review",
-                       proof_received=True,
-                       reason="Proof received — under manual review.",
-                       followup="proof_received")
-        # Proof unavailable AFTER proof already received -> note it, keep proof.
-        if proof_gone and prior_proof_received:
+    # Explicit UI-button signals vs signals merely derived from the text.
+    typed_proof_now = message_intent == "proof_attached" or bool(intent.get("proof_mentioned"))
+    typed_proof_gone = message_intent == "proof_unavailable" or bool(intent.get("proof_unavailable"))
+
+    def _proof_received_out():
+        return out("escalated", "under_manual_review", "manual_review",
+                   proof_received=True,
+                   reason="Proof received — under manual review.",
+                   followup="proof_received")
+
+    def _proof_gone_out():
+        if prior_proof_received:
             return out("escalated", "under_manual_review", "manual_review",
                        proof_received=True,
                        reason="Internal issue noted; proof already on file.",
                        followup="proof_already_received")
-        # Proof unavailable -> manual review.
-        if proof_gone:
-            return out("escalated", "under_manual_review", "manual_review",
-                       reason="Proof unavailable — manual review.",
-                       followup="proof_unavailable")
-        # Conversational follow-up question -> keep state, answer it.
+        return out("escalated", "under_manual_review", "manual_review",
+                   reason="Proof unavailable — manual review.",
+                   followup="proof_unavailable")
+
+    if prior_decision and active_case:
+        # 0a) Explicit proof BUTTONS always win.
+        if proof_attached:
+            return _proof_received_out()
+        if proof_unavailable:
+            return _proof_gone_out()
+        # 0b) A follow-up QUESTION wins over text-derived proof hints — "am I
+        #     eligible if it's INTERNALLY damaged?" is a question, not a proof refusal.
         if message_intent in FOLLOWUP_INTENTS:
             return out(prior_decision, prior_stage,
                        prior.get("pending_requirement", "none"),
                        proof_received=prior_proof_received,
                        reason=f"Follow-up '{message_intent}' — answered without re-deciding.",
                        followup=message_intent)
+        # 0c) Typed proof statements ("I have attached proof" / "it's internal,
+        #     can't be shown in a photo").
+        if typed_proof_now:
+            return _proof_received_out()
+        if typed_proof_gone:
+            return _proof_gone_out()
         # Repeated defect / clarification while already under review -> acknowledge.
         if message_intent in ("defect_claim", "clarification_answer") and prior_stage in (
             "under_manual_review", "warranty_support"

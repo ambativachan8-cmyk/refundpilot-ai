@@ -231,14 +231,21 @@ policy rules), **`/crm`** (the 15 mock profiles + their scenario labels), and
 
 ```bash
 cd backend
-pytest                 # 74 tests: policy, intent, multi-turn conversation, scenario matrix
+pytest                 # 76 tests: policy, intent, multi-turn conversation, scenario matrix
 ```
 
-**Scenario QA matrix** — a readable pass/fail sweep of ~15 realistic conversations
+**Scenario QA matrix** — a readable pass/fail sweep of 30+ realistic conversations
 (clean return, defect+proof, defect+no-proof, manipulation, policy violations…):
 ```bash
 cd backend
 .venv\Scripts\python.exe scripts\manual_qa_matrix.py    # prints a PASS/FAIL table
+```
+
+**Customer-conversation simulator** — replays every multi-turn conversation like a
+QA customer and prints per-turn message intent, decision, stage, and **latency**:
+```bash
+cd backend
+.venv\Scripts\python.exe scripts\simulate_customer_conversations.py
 ```
 The same scenarios run as assertions in `tests/test_support_workflow_matrix.py`.
 
@@ -380,9 +387,13 @@ believing proof exists. Proof storage is **simulated** for this prototype (see
   repeated clarification). **Warranty cases** answer their own timeline (~2–5 business
   days). **Policy questions are answered as policy questions**: "how many days was the
   refund window?" cites the 30/15-day windows and whether this order is inside or
-  outside — never the review timeline; "am I eligible…?" gets a conditional,
-  stage-aware eligibility answer. **Typo-tolerant** for demo phrases ("hoq maany
-  days", "defect6ive").
+  outside — never the review timeline; "in how many days should I report the issue?"
+  gets the **claim-reporting deadline** for this order's category; "am I eligible…?"
+  gets a conditional, window-aware eligibility answer; "refund or warranty?" is
+  answered from the window + verification rules; "will I get an email?" cites the
+  CRM email and notes that **notifications are simulated** in this prototype (the
+  simulated send is recorded in the admin log). **Typo-tolerant** for demo phrases
+  ("hoq maany days", "defect6ive", "warrenty").
 - **Damaged-on-arrival vs defect**: a damage claim can still be refunded once verified
   (proof → manual review → possible refund), whereas a pure defect/not-working claim is
   never auto-approved. Proof state is conflict-safe: attaching proof after "can't show

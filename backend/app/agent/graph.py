@@ -247,6 +247,17 @@ def node_generate_response(state: AgentState) -> dict[str, Any]:
     upd = _log(state, "generate_response", "generate_response",
                f"mode={mode}", f"Generated {len(response)}-char reply [{ms}ms]",
                snapshot=decision)
+    # Email questions: record the (simulated) notification in the audit trail.
+    if state.get("message_intent") == "email_notification_question":
+        email = (state.get("customer") or {}).get("email", "registered email")
+        entry = tools.save_reasoning_log(
+            state["session_id"], "notify", "notification_simulated",
+            f"to={email}",
+            "Case-update email simulated (prototype — no real email sent)",
+            "success", state.get("decision"),
+        )
+        upd["logs"] = upd["logs"] + [entry]
+        upd["tool_calls"] = upd["tool_calls"] + ["notification_simulated"]
     upd["customer_response"] = response
     upd["llm_mode"] = mode
     return upd

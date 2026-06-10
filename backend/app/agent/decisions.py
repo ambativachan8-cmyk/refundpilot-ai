@@ -44,6 +44,7 @@ def _alternative_for(decision: str) -> str:
 def _followup_response(
     name: str, product: str, stage: str, followup: str, mi: str,
     order: dict[str, Any] | None = None,
+    customer: dict[str, Any] | None = None,
 ) -> str:
     """Answer a follow-up question on an already-decided/in-progress case.
 
@@ -52,17 +53,47 @@ def _followup_response(
     """
     intent = followup if followup != mi else mi  # both carry the message intent
     order = order or {}
+    customer = customer or {}
+
+    # Window facts (used by the policy-question answers below).
+    days = int(order.get("delivered_days_ago", 0) or 0)
+    electronics = order.get("category") == "electronics"
+    window = 15 if electronics else 30
+    inside = days <= window
+    side = "inside" if inside else "outside"
 
     # --- Universal policy questions (same answer regardless of stage) --------
     if intent == "refund_window_question":
-        days = int(order.get("delivered_days_ago", 0) or 0)
-        electronics = order.get("category") == "electronics"
-        window = 15 if electronics else 30
-        side = "inside" if days <= window else "outside"
         kind = "an electronics item (15-day window)" if electronics else "a standard item (30-day window)"
         return (f"Hi {name}, our refund window is 30 days from delivery for standard items and "
                 f"15 days for electronics. The {product} is {kind} and was delivered {days} days "
                 f"ago, so this order is {side} its refund window.")
+
+    if intent == "claim_deadline_question":
+        kind = "electronics" if electronics else "standard items"
+        base = (f"Hi {name}, for {kind} a refund or damage claim should be raised within "
+                f"{window} days of delivery. The {product} was delivered {days} days ago, so ")
+        if inside:
+            return base + ("this request is still inside the eligible reporting window. Since the "
+                           "claim needs verification, final approval still depends on the review.")
+        return base + ("this order is outside the reporting window — a verified defect would be "
+                       "handled through warranty support rather than a refund.")
+
+    if intent == "email_notification_question":
+        email = customer.get("email") or "the registered email on your CRM profile"
+        return (f"Hi {name}, yes — once the review is complete, the support team will send the "
+                f"case update to {email}. In this prototype the email is simulated rather than "
+                "actually sent, and the update is recorded in the admin dashboard.")
+
+    if intent == "refund_vs_warranty_question":
+        if inside:
+            return (f"Hi {name}, the {product} is still within its {window}-day refund window, so a "
+                    "verified damaged-on-arrival issue may be eligible for a refund or replacement. "
+                    "If the review treats it as an internal defect rather than delivery damage, it "
+                    "may be routed to warranty support instead. The review team decides after validation.")
+        return (f"Hi {name}, this order is outside its {window}-day refund window, so I can't "
+                "promise a direct refund. If the issue is verified as a defect, it will be handled "
+                "through warranty support, which may offer a repair or replacement after validation.")
 
     if intent == "eligibility_question":
         if stage == "approved":
@@ -79,9 +110,11 @@ def _followup_response(
         if stage == "escalated":
             return (f"Hi {name}, eligibility depends on manual approval — your {product} request "
                     "is already with the support team, and they'll confirm the decision.")
-        return (f"Hi {name}, if the review confirms the issue and the policy conditions are met, "
-                "you may be eligible for a refund, replacement, or warranty resolution. I can't "
-                "approve it before verification — the team will confirm after reviewing your case.")
+        return (f"Hi {name}, the {product} is {side} its {window}-day refund window ({days} days "
+                "since delivery). If the review verifies the reported issue and the policy "
+                "conditions are met, you may be eligible for a refund, replacement, or warranty "
+                "resolution. I can't approve it before verification — the team will confirm after "
+                "reviewing your case.")
 
     if stage == "under_manual_review":
         if intent == "proof_received":
@@ -266,7 +299,8 @@ def template_response(
 
     # --- Follow-up answers on an existing case (don't re-state the decision) --
     if followup:
-        return _followup_response(name, product, stage or "", followup, message_intent or "", order)
+        return _followup_response(name, product, stage or "", followup, message_intent or "",
+                                  order, customer)
 
     issue_category = intent.get("issue_category", "unknown")
 
