@@ -33,7 +33,10 @@ _DEFECT = re.compile(
 # Damaged-on-arrival language.
 _DAMAGED_ARRIVAL = re.compile(
     r"\b(arrived\s+(broken|damaged|cracked|shattered)|came\s+(broken|damaged)|"
-    r"damaged\s+on\s+arrival|broken\s+on\s+arrival|box\s+was\s+(crushed|damaged))\b",
+    r"damaged\s+on\s+arrival|broken\s+on\s+arrival|box\s+was\s+(crushed|damaged)|"
+    # "damage(s) when i recieved/got/opened" (typo-tolerant: rec\w+)"
+    r"damage[sd]?\s+when\s+(i\s+)?(rec\w+|got|open\w*)|"
+    r"(rec\w+|got)\s+(it\s+)?(with\s+)?(little\s+|some\s+|minor\s+)?damage)",
     re.IGNORECASE,
 )
 # "not (properly) working", "isn't working", "doesn't work", "stopped working"...

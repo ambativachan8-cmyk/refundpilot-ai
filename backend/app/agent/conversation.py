@@ -23,7 +23,7 @@ def _within_window(order: dict[str, Any]) -> bool:
 
 
 SETTLED_STAGES = {
-    "approved", "denied", "under_manual_review",
+    "approved", "denied", "escalated", "under_manual_review",
     "warranty_support", "store_credit", "already_cancelled",
 }
 # Follow-up question types that should be answered without re-deciding.
@@ -66,6 +66,9 @@ def evaluate(
     issue_category = intent.get("issue_category", "unknown")
     is_safety = issue_category == "safety_hazard"
     is_fit = issue_category in ("size_or_fit_issue", "mismatch_or_wrong_item")
+    is_damage = (
+        issue_category == "visible_damage" or intent.get("reason") == "damaged_on_arrival"
+    )
 
     prior_stage = prior.get("stage")
     prior_defect = bool(prior.get("defect_claim_active"))
@@ -92,14 +95,37 @@ def evaluate(
             "followup": followup,
         }
 
-    # 0) Continuation of an existing case: answer follow-ups WITHOUT re-deciding.
-    #    (Skip when the customer is supplying new proof signals.)
+    # 0) Continuation of an existing case: handle proof + answer follow-ups WITHOUT
+    #    re-running the decision ladder.
     prior_decision = prior.get("last_decision")
-    if prior_decision and not proof_attached and not proof_unavailable:
-        # Conversational follow-up on a settled or waiting case -> keep state.
-        if message_intent in FOLLOWUP_INTENTS and (
-            prior_stage in SETTLED_STAGES or prior_stage == "waiting_for_proof"
-        ):
+    active_case = prior_stage in SETTLED_STAGES or prior_stage == "waiting_for_proof"
+    proof_now = (
+        proof_attached or message_intent == "proof_attached" or bool(intent.get("proof_mentioned"))
+    )
+    proof_gone = (
+        proof_unavailable or message_intent == "proof_unavailable"
+        or bool(intent.get("proof_unavailable"))
+    )
+    if prior_decision and active_case:
+        # Proof attached (button OR typed) -> record it; never repeat "not visible".
+        if proof_now:
+            return out("escalated", "under_manual_review", "manual_review",
+                       proof_received=True,
+                       reason="Proof received — under manual review.",
+                       followup="proof_received")
+        # Proof unavailable AFTER proof already received -> note it, keep proof.
+        if proof_gone and prior_proof_received:
+            return out("escalated", "under_manual_review", "manual_review",
+                       proof_received=True,
+                       reason="Internal issue noted; proof already on file.",
+                       followup="proof_already_received")
+        # Proof unavailable -> manual review.
+        if proof_gone:
+            return out("escalated", "under_manual_review", "manual_review",
+                       reason="Proof unavailable — manual review.",
+                       followup="proof_unavailable")
+        # Conversational follow-up question -> keep state, answer it.
+        if message_intent in FOLLOWUP_INTENTS:
             return out(prior_decision, prior_stage,
                        prior.get("pending_requirement", "none"),
                        proof_received=prior_proof_received,
@@ -128,6 +154,28 @@ def evaluate(
     if is_safety:
         return out("escalated", "under_manual_review", "manual_review",
                    reason="Safety hazard reported — prioritised for urgent review.")
+
+    # 1b) Damaged-on-arrival. With proof on file the policy engine already approved
+    #     it; without proof, request proof then route to manual review (the item CAN
+    #     still be refunded once damage is verified — unlike a pure defect claim).
+    if is_damage:
+        if base_decision == "approved":
+            return out("approved", "approved", "none",
+                       reason="Damaged on arrival with proof — approved.")
+        if prior_stage == "under_manual_review":
+            return out("escalated", "under_manual_review", "manual_review",
+                       proof_received=prior_proof_received,
+                       reason="Damage claim already under manual review.")
+        if proof_unavailable or proof_offered or prior_proof_received:
+            return out("escalated", "under_manual_review", "manual_review",
+                       proof_received=bool(proof_offered or prior_proof_received),
+                       reason="Damage claim — sent to manual review.")
+        if prior_stage == "waiting_for_proof":
+            return out("escalated", "under_manual_review", "manual_review",
+                       reason="Damage proof not provided — sent to manual review.")
+        return out("escalated", "waiting_for_proof", "provide_photo_or_video_proof",
+                   proof_required=True,
+                   reason="Damage-on-arrival claim — photo/video proof requested.")
 
     # 2) Defect / not-working claim — never auto-approve.
     if defect_active:

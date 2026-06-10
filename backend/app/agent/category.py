@@ -49,7 +49,7 @@ _INTERNAL = re.compile(
 )
 _VISIBLE_DAMAGE = re.compile(
     r"\b(crack(s|ed)?|broke(n)?|shatter(ed)?|dent(s|ed)?|chip(ped|s)?|"
-    r"scratch(ed|es)?|torn|ripped|leak(ing|ed)?)\b",
+    r"scratch(ed|es)?|torn|ripped|leak(ing|ed)?|damage[sd]?)\b",
     re.IGNORECASE,
 )
 _DEFECT_ELEC = re.compile(

@@ -50,6 +50,16 @@ def _followup_response(name: str, product: str, stage: str, followup: str, mi: s
     intent = followup if followup != mi else mi  # both carry the message intent
 
     if stage == "under_manual_review":
+        if intent == "proof_received":
+            return (f"Hi {name}, thanks — I've received your proof for the {product}. The case is "
+                    "under manual review, and the support team will validate the issue and follow up.")
+        if intent == "proof_already_received":
+            return (f"Hi {name}, I've noted the issue may be internal/software-related. Since proof is "
+                    "already attached, the review team will consider both your explanation and the proof.")
+        if intent == "proof_unavailable":
+            return (f"Hi {name}, I understand the issue with the {product} may not be visible in a photo. "
+                    "I can't approve an immediate refund without verification, so it's under manual "
+                    "review / warranty support — the team will validate the issue and get back to you.")
         if intent == "timeline_question":
             return (f"Hi {name}, manual review usually takes 24–48 hours. Your case for the "
                     f"{product} is already under review, and the support team will validate "
@@ -151,9 +161,47 @@ def _followup_response(name: str, product: str, stage: str, followup: str, mi: s
         return (f"Hi {name}, this request was denied under our refund policy. I can help with warranty "
                 "support if the item has a defect.")
 
+    if stage == "escalated":
+        if intent == "timeline_question":
+            return (f"Hi {name}, a human agent typically reviews escalated requests within about "
+                    "24 hours and will confirm the decision.")
+        if intent in ("status_question", "pressure_or_manipulation", "frustration_or_complaint"):
+            return (f"Hi {name}, I can't approve this directly — the {product} needs manual approval "
+                    "(e.g. a high-value order above our auto-approval threshold). It's already escalated, "
+                    "and the support team will review and confirm, usually within 24 hours.")
+        if intent in ("approval_owner_question", "process_explanation_question", "next_step_question"):
+            return (f"Hi {name}, a human support agent / approval team will review the escalated case and "
+                    "confirm the decision — the AI agent can't approve this one automatically.")
+        if intent in ("replacement_question", "refund_or_replacement_question", "warranty_question"):
+            return (f"Hi {name}, the review team will decide the resolution (refund, replacement, or "
+                    "warranty) once they've checked the {product}. It's already escalated for review.")
+        if intent == "human_agent_request":
+            return (f"Hi {name}, this is already escalated to a human support agent, who will review and "
+                    "confirm the decision.")
+        return (f"Hi {name}, your request for the {product} is escalated for manual review; the support "
+                "team will confirm the decision, usually within 24 hours.")
+
     if stage == "warranty_support":
+        if intent in ("timeline_question", "status_question", "next_step_question",
+                      "process_explanation_question"):
+            return (f"Hi {name}, warranty validation usually takes 2–5 business days depending on service "
+                    "centre availability. The warranty team will inspect the issue and update you with "
+                    "repair or replacement options.")
+        if intent in ("replacement_question", "refund_or_replacement_question"):
+            return (f"Hi {name}, the warranty team will determine whether a repair or a replacement is "
+                    "appropriate after inspecting the {product}. I can't promise a replacement before validation.")
+        if intent == "approval_owner_question":
+            return (f"Hi {name}, the warranty / service team validates the defect and decides on repair or "
+                    "replacement — this isn't something the AI agent approves automatically.")
+        if intent == "human_agent_request":
+            return (f"Hi {name}, I've routed this to the warranty support team — a specialist will handle "
+                    "the inspection and follow up.")
+        if intent in ("pressure_or_manipulation", "frustration_or_complaint"):
+            return (f"Hi {name}, I understand, but the {product} is outside the refund window so I can't "
+                    "issue a direct refund. Warranty support can evaluate a repair or replacement.")
         return (f"Hi {name}, the {product} is being handled as a warranty case since it's outside the "
-                "refund window. The warranty team will validate the issue; I can't issue a direct refund.")
+                "refund window. The warranty team will validate the issue and update you with repair or "
+                "replacement options.")
 
     if stage in ("store_credit", "already_cancelled"):
         return (f"Hi {name}, your case for the {product} is settled as noted. Let me know if you have "
@@ -205,24 +253,22 @@ def template_response(
     # --- Stage-aware replies take priority (multi-turn support workflow) -----
     if stage == "waiting_for_proof":
         return (
-            f"Hi {name}, I can't approve a refund for the {product} yet because it's "
-            "reported as not working, and a defect claim needs verification. Please "
-            "attach a photo or short video using the proof buttons below — or choose "
-            "“I can't show this in a photo” if the issue is internal (e.g. "
-            "software or bluetooth) and we'll route it to manual review."
+            f"Hi {name}, I can't approve a refund for the {product} yet because the claim "
+            "needs verification. Please attach a photo or short video of the issue using "
+            "the proof buttons below — or choose “I can't show this in a photo” if it's an "
+            "internal issue (e.g. software or bluetooth) and I'll route it to manual review."
         )
     if stage == "under_manual_review" and proof_received:
         return (
             f"Hi {name}, thanks — I've received your proof for the {product}. I can't "
-            "auto-approve a defect refund, so I'm escalating this to manual review and "
-            "our support team will validate the issue and follow up."
+            "auto-approve this, so I'm sending it to manual review and our support team "
+            "will validate the issue and follow up."
         )
     if stage == "under_manual_review":
         return (
-            f"Hi {name}, I understand the issue with the {product} may not be visible "
-            "in a photo. I can't approve an immediate refund without verification, so "
-            "I'm moving this to manual review / warranty support — the team will "
-            "validate the issue and get back to you."
+            f"Hi {name}, I can't approve an immediate refund for the {product} without "
+            "verification, so I'm moving this to manual review / warranty support — the "
+            "team will validate the issue and get back to you."
         )
     if stage == "needs_clarification":
         return (

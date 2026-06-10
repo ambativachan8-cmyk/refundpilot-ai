@@ -197,6 +197,56 @@ FLOWS: list[dict[str, Any]] = [
              "response_contains": ["replacement"]},
         ],
     },
+    # --- Latest live transcripts (Customer Conversations, set 2) -------------
+    {
+        "name": "Laptop high-value: clarify -> unused -> 'cant you refund?'",
+        "customer": "CUST-008",
+        "turns": [
+            {"msg": "can i return my laptop ?", "not_approved": True,
+             "stage_in": {"needs_clarification"}},
+            {"msg": "unused", "not_approved": True, "stage_in": {"escalated"}},
+            {"msg": "cant you refund ?", "not_approved": True,
+             "response_contains": ["manual"],
+             "response_not_contains": ["confirm whether the item is unused"]},
+        ],
+    },
+    {
+        "name": "Coffee machine warranty + typo timeline",
+        "customer": "CUST-014",
+        "turns": [
+            {"msg": "the coffee machine is not working", "decision_in": {"warranty_support"}},
+            {"msg": "i have a defect too its not properly working",
+             "decision_in": {"warranty_support"}},
+            {"msg": "hoq maany days will it take ?", "decision_in": {"warranty_support"},
+             "response_contains": ["business days"]},
+            {"msg": "how many days will it take ?", "decision_in": {"warranty_support"},
+             "response_contains": ["business days"]},
+        ],
+    },
+    {
+        "name": "Headphones detailed damage clarification (no re-clarify)",
+        "customer": "CUST-001",
+        "turns": [
+            {"msg": "can i return my product ?", "not_approved": True,
+             "stage_in": {"needs_clarification"}},
+            {"msg": "its wireless headphones and its used been like 5 days and it is not giving a "
+                    "good experience and have little damages when i recieved the product",
+             "not_approved": True, "stage_in": {"waiting_for_proof", "under_manual_review"},
+             "response_not_contains": ["confirm whether the item is unused"]},
+            {"msg": "The issue is internal/software-related and cannot be shown clearly in a photo.",
+             "not_approved": True, "stage_in": {"under_manual_review", "warranty_support"}},
+            {"msg": "I have attached photo/video proof of the issue.", "not_approved": True,
+             "stage_in": {"under_manual_review"}, "response_contains": ["received"],
+             "response_not_contains": ["may not be visible"]},
+            {"msg": "Who will approve it?", "not_approved": True,
+             "response_contains": ["specialist"]},
+        ],
+    },
+    {
+        "name": "Cancelled order: 'take back the product'",
+        "customer": "CUST-013",
+        "turns": [{"msg": "take back the product", "decision_in": {"already_cancelled"}}],
+    },
 ]
 
 

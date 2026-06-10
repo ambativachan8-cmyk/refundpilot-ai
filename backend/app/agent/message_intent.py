@@ -56,8 +56,18 @@ _PRESSURE = re.compile(
     re.IGNORECASE,
 )
 _TIMELINE = re.compile(
-    r"(how\s+(much\s+time|long)|how\s+many\s+days|when\s+will|how\s+soon|by\s+when|"
-    r"time\s+(will\s+)?it\s+take|eta|turnaround|how\s+much\s+longer)",
+    # Typo-tolerant: hoq/how, maany/many, wiill/will, wen/when, mny/many, dayss.
+    r"(h[ouw]+[qw]?\s+(much\s+time|long|man+y\s+days?|m[ae]ny\s+days?|mny\s+days?)|"
+    r"how\s+man+y\s+days?|w[ie]+ll\s+it\s+take|when?\s+will|how\s+soon|by\s+when|"
+    r"days?\s+(wi+ll|to)\s+(it\s+)?(take|resolve)|time\s+(wi+ll\s+)?it\s+take|eta|"
+    r"turnaround|how\s+much\s+longer|when\s+(will\s+it\s+be\s+)?resolv)",
+    re.IGNORECASE,
+)
+# Direct "can't you just refund?" type pushback on an existing case (not a fresh
+# request) — answered with current status, never re-clarified.
+_DIRECT_REFUND_Q = re.compile(
+    r"(can'?t|cant|cannot|can\s+(u|you)|could\s+(u|you)|cu?ld\s+you|why\s+(not|can'?t|cant))"
+    r"\s+(you\s+)?(just\s+)?(refund|return|approve|do\s+it)",
     re.IGNORECASE,
 )
 _STATUS = re.compile(
@@ -81,10 +91,13 @@ _PROOF_ATTACHED = re.compile(
     r"(photo|picture|video|proof|screenshot)|i\s+have\s+proof|proof\s+(is\s+)?attached",
     re.IGNORECASE,
 )
+# Only EXPLICIT inability to provide proof. A bare mention of "software/bluetooth"
+# is a defect description, NOT a refusal of proof — those route via defect_claim.
 _PROOF_UNAVAIL = re.compile(
-    r"(can'?t|cannot|can\s+not|unable\s+to)\s+(show|upload|provide|capture)"
-    r"|cannot\s+come\s+in\s+photos?|not\s+visible|no\s+visible\s+(damage|defect)"
-    r"|software|bluetooth|internal|firmware",
+    r"(can'?t|cannot|can\s+not|unable\s+to)\s+(show|upload|provide|capture|share|give)"
+    r"|cannot\s+come\s+in\s+(a\s+)?photos?|can'?t\s+be\s+(shown|photographed|seen)"
+    r"|not\s+visible|no\s+visible\s+(damage|defect)|nothing\s+to\s+show|no\s+proof|"
+    r"internal/software-related",
     re.IGNORECASE,
 )
 _APPROVAL_OWNER = re.compile(
@@ -119,6 +132,7 @@ _REPLACEMENT = re.compile(
     re.IGNORECASE,
 )
 _WARRANTY = re.compile(r"\bwarrant(y|ies)\b", re.IGNORECASE)
+_DAMAGE = re.compile(r"\b(damage[sd]?|crack(s|ed)?|broke(n)?|dent(s|ed)?|scratch(ed|es)?|shatter)\b", re.IGNORECASE)
 _REFUND = re.compile(r"\b(refund|return|money\s+back|reimburse)\b", re.IGNORECASE)
 _CONDITION = re.compile(
     r"\b(un-?used|haven'?t\s+used|not\s+used|never\s+used|delivered|days\s+ago|"
@@ -163,13 +177,16 @@ def classify_keyword(
         return "status_question"
     if _NEXT_STEP.search(m):
         return "next_step_question"
+    # "can't you just refund?" on an EXISTING case is pushback, not a fresh request.
+    if prior_stage and _DIRECT_REFUND_Q.search(m):
+        return "status_question"
     if _THANKS.search(m):
         return "thanks_or_acknowledgement"
     if _PROOF_ATTACHED.search(m):
         return "proof_attached"
     if _PROOF_UNAVAIL.search(m):
         return "proof_unavailable"
-    if is_defect_claim(m):
+    if is_defect_claim(m) or _DAMAGE.search(m):
         return "defect_claim"
     # A condition statement during clarification is an answer, not a new request.
     if prior_stage == "needs_clarification" and _CONDITION.search(m):

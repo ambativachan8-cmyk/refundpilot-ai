@@ -101,13 +101,18 @@ def node_extract_intent(state: AgentState) -> dict[str, Any]:
 
 def node_classify_message(state: AgentState) -> dict[str, Any]:
     prior = state.get("prior_session") or {}
+    # Message intent only drives routing on a settled/waiting case (a true follow-up).
+    # Elsewhere we re-decide from refund intent + category, so skip the LLM call.
+    _followup_stages = {
+        "approved", "denied", "escalated", "under_manual_review",
+        "warranty_support", "store_credit", "already_cancelled", "waiting_for_proof",
+    }
     mi, method = msgintent.classify_message_intent(
         state.get("user_message", ""),
         proof_attached=bool(state.get("req_proof_attached")),
         proof_unavailable=bool(state.get("req_proof_unavailable")),
         prior_stage=prior.get("stage"),
-        # Only spend an LLM call on follow-ups, where the message intent matters.
-        allow_llm=bool(prior),
+        allow_llm=prior.get("stage") in _followup_stages,
     )
     upd = _log(state, "classify_message", "classify_message_intent",
                f"method={method} prior_stage={prior.get('stage')}",

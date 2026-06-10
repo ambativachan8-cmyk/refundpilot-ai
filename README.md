@@ -222,7 +222,7 @@ App at http://localhost:3000 (chat) and http://localhost:3000/admin (logs).
 
 ```bash
 cd backend
-pytest                 # 65 tests: policy, intent, multi-turn conversation, scenario matrix
+pytest                 # 69 tests: policy, intent, multi-turn conversation, scenario matrix
 ```
 
 **Scenario QA matrix** — a readable pass/fail sweep of ~15 realistic conversations
@@ -364,9 +364,15 @@ believing proof exists. Proof storage is **simulated** for this prototype (see
   urgent safety escalation** ("stop using it and unplug it"), not generic clarification.
 - **Follow-up intents** (`agent/message_intent.py`): timeline / status / next-step /
   **approval-owner** / process / warranty / replacement / human-agent / frustration /
-  pressure. On a settled or in-review case these are answered **without re-deciding**
-  (e.g. "Who will process the refund?" returns a returns-team / payment-processor
-  answer, never a repeated proof request).
+  pressure. On a settled, escalated, or in-review case these are answered **without
+  re-deciding** (e.g. "Who will process the refund?" → returns-team / payment-processor
+  answer; "cant you refund?" on a high-value case → manual-approval explanation, not a
+  repeated clarification). **Warranty cases** answer their own timeline (~2–5 business
+  days). **Typo-tolerant** for demo phrases ("hoq maany days", "defect6ive").
+- **Damaged-on-arrival vs defect**: a damage claim can still be refunded once verified
+  (proof → manual review → possible refund), whereas a pure defect/not-working claim is
+  never auto-approved. Proof state is conflict-safe: attaching proof after "can't show
+  it" updates to *proof received* and stops repeating the "not visible in a photo" line.
 - **Deterministic-first + fast path**: keyword extraction is authoritative for clear
   messages; the LLM is consulted **only** for genuinely ambiguous text, and reply
   rephrasing is off by default (`LLM_REPHRASE`). Result: typical responses are

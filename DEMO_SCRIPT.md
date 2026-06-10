@@ -148,8 +148,18 @@ an **Escalated** decision and a `warning` log on the high-value rule.
 - Back on the **approved** headphones conversation, ask:
   > **Who will process the refund?**
   → "It answers the actual question — returns team and payment processor — instead
-  of repeating the refund decision. Every one of these replies came back in well
-  under a second; the admin log shows a `timing` entry per request."
+  of repeating the refund decision."
+
+- **High-value pushback** — CUST-008 laptop, say **unused**, then:
+  > **cant you refund?**
+  → "It doesn't re-ask the same clarification — it explains the laptop needs manual
+  approval because it's high-value, and it's already escalated."
+
+- **Warranty timeline (with a typo)** — CUST-014 "coffee machine is not working", then:
+  > **hoq maany days will it take ?**
+  → "It tolerates the typo and gives the *warranty* timeline — 2–5 business days —
+  not the manual-review timeline. Every one of these replies came back in well under
+  a second; the admin log shows a `timing` entry per request."
 
 ## 5. Admin logs walkthrough (~1:00)
 
