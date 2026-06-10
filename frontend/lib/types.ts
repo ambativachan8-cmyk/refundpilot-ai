@@ -32,6 +32,8 @@ export interface Order {
   photo_proof_available: boolean;
   payment_method: string;
   country: string;
+  scenario_label?: string;
+  expected_decision?: string;
 }
 
 export interface PolicyCheck {

@@ -108,6 +108,8 @@ class Order(BaseModel):
     photo_proof_available: bool
     payment_method: str
     country: str
+    scenario_label: str = ""
+    expected_decision: str = ""
 
 
 class PolicyCheck(BaseModel):

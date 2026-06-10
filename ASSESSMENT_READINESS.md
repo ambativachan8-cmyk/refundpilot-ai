@@ -3,7 +3,9 @@
 Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · ❌ fail.
 
 ## A. Mock data
-- ✅ 15 CRM profiles (`backend/app/seed.py`).
+- ✅ 15 CRM profiles (`backend/app/seed.py`) — **synthetic but realistic**; no real
+  or scraped data, no scraping dependency. Each order carries a `scenario_label` and
+  `expected_decision` (documentation only — the policy engine decides; viewable at `/crm`).
 - ✅ Strict refund policy document (`backend/app/data/refund_policy.md`).
 - ✅ Orders cover the required cases: standard approval, outside window, electronics
   window, used, damaged+proof, damaged no-proof, final-sale, high-value, refund
@@ -61,6 +63,12 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
 - ✅ LLM never decides the outcome — deterministic `policy.py` is source of truth.
 
 ## D. Frontend
+- ✅ **Clean customer page** (`/`): customer/order context + a wide chat with an
+  in-chat Case Status bar. Internal demo shortcuts are tucked in a collapsed
+  "Demo scenarios (for evaluation)" section — not customer-facing. No policy-panel
+  clutter (policy detail lives in `/policy` and the admin logs).
+- ✅ Four pages: `/` (chat), `/policy` (rules), `/crm` (15 mock profiles +
+  scenario labels), `/admin` (reasoning logs).
 - ✅ Customer chat works (`/`).
 - ✅ Quick demo buttons work (eligible / policy violation / damaged / high-value).
 - ✅ Admin logs show reasoning / tool traces, incl. the intent-extraction step

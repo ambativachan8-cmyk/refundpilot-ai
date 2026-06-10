@@ -32,18 +32,20 @@ export default function RootLayout({
               </div>
             </Link>
             <nav className="flex items-center gap-1 text-sm">
-              <Link
-                href="/"
-                className="rounded-lg px-3 py-1.5 text-slate-300 transition hover:bg-white/5 hover:text-white"
-              >
-                Customer Chat
-              </Link>
-              <Link
-                href="/admin"
-                className="rounded-lg px-3 py-1.5 text-slate-300 transition hover:bg-white/5 hover:text-white"
-              >
-                Admin Logs
-              </Link>
+              {[
+                { href: "/", label: "Customer Chat" },
+                { href: "/policy", label: "Policy" },
+                { href: "/crm", label: "CRM" },
+                { href: "/admin", label: "Admin Logs" },
+              ].map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="rounded-lg px-3 py-1.5 text-slate-300 transition hover:bg-white/5 hover:text-white"
+                >
+                  {l.label}
+                </Link>
+              ))}
             </nav>
           </div>
         </header>

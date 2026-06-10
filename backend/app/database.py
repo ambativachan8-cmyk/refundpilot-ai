@@ -45,7 +45,8 @@ def init_db(reset: bool = False) -> None:
                 customer_id TEXT, product_name TEXT, category TEXT,
                 price REAL, delivered_days_ago INTEGER, status TEXT,
                 condition_claimed TEXT, final_sale INTEGER, damaged_claim INTEGER,
-                photo_proof_available INTEGER, payment_method TEXT, country TEXT
+                photo_proof_available INTEGER, payment_method TEXT, country TEXT,
+                scenario_label TEXT, expected_decision TEXT
             );
             CREATE TABLE IF NOT EXISTS logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +82,8 @@ def init_db(reset: bool = False) -> None:
             cur.executemany(
                 "INSERT INTO orders VALUES (:order_id,:customer_id,:product_name,:category,"
                 ":price,:delivered_days_ago,:status,:condition_claimed,:final_sale,"
-                ":damaged_claim,:photo_proof_available,:payment_method,:country)",
+                ":damaged_claim,:photo_proof_available,:payment_method,:country,"
+                ":scenario_label,:expected_decision)",
                 [
                     {
                         **o,

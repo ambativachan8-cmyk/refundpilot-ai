@@ -8,7 +8,11 @@ chatbot."
 
 1. Start the backend: `cd backend` → activate `.venv` → `uvicorn app.main:app --port 8000`.
 2. Start the frontend: `cd frontend` → `npm run dev`.
-3. Open two tabs: http://localhost:3000 (chat) and http://localhost:3000/admin (logs).
+3. Open the tabs you'll show: http://localhost:3000 (clean customer chat),
+   `/policy` (rules), `/crm` (15 mock profiles), and `/admin` (reasoning logs).
+   The customer page is intentionally clean — one-click demo scenarios live in the
+   collapsed "Demo scenarios (for evaluation)" panel in the left column; expand it
+   when you want to fire a scenario, or just pick a customer and type.
 4. (Optional) confirm http://localhost:8000/health shows `"orchestrator":"langgraph"`
    and the LLM provider — `"llm_provider":"ollama"` (local) / `"openai"` / `"none"`.
 5. Have the code editor open at `backend/app/agent/graph.py` and `backend/app/policy.py`.

@@ -216,7 +216,16 @@ cd frontend
 npm install
 npm run dev
 ```
-App at http://localhost:3000 (chat) and http://localhost:3000/admin (logs).
+Four pages: **`/`** (clean customer chat — demo shortcuts are tucked into a
+collapsed "Demo scenarios" section, not customer-facing), **`/policy`** (the strict
+policy rules), **`/crm`** (the 15 mock profiles + their scenario labels), and
+**`/admin`** (real-time reasoning logs, intents, policy checks, timing).
+
+> **Mock data is synthetic but realistic** — hand-authored to cover the 15
+> refund-policy scenarios. No real or scraped customer data is used, and no
+> scraping dependency is required. `expected_decision` in the seed/CRM viewer
+> documents intent for evaluators; the agent never reads it — the policy engine
+> decides independently.
 
 ## 13. Run the tests
 
@@ -251,6 +260,7 @@ npm run build          # production build
 | GET | `/orders` | All orders (`?customer_id=` to filter) |
 | GET | `/policy` | Policy markdown + parsed rules |
 | POST | `/chat` | Run the agent: `{ customer_id, message }` |
+| POST | `/agent/run` | Alias of `/chat` (the agent endpoint) |
 | GET | `/admin/logs` | All reasoning logs, newest first |
 | GET | `/admin/logs/{session_id}` | Logs for one session |
 | POST | `/seed` | Dev: reset + reseed mock data |

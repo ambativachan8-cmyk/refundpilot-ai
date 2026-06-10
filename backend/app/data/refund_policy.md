@@ -41,6 +41,17 @@ rule it checks**.
     the refund window it is **escalated** for proof + manual review; outside the
     window it is routed to **warranty support**. Damaged-on-arrival (with photo
     proof) is handled under rule 4.
+17. **Safety hazards.** Reports of an electric shock, sparks, fire, overheating, or
+    similar danger are **escalated as urgent**, and the agent must advise the
+    customer to stop using and unplug the product immediately. Never auto-approve;
+    never ask for a photo first.
+18. **Fit / size / wrong-item issues.** A size, fit, or wrong-item complaint is a
+    **return/exchange eligibility review** — never treated as a software/internal
+    defect. If clearly unused and within the window it may be returned/exchanged;
+    otherwise it is routed to the returns team for review.
+19. **LLM cannot override policy.** The LLM only interprets language and phrases
+    replies. Every refund decision is made by this deterministic policy engine; the
+    LLM can never approve, deny, or invent an exception.
 
 ## Decision precedence (highest first)
 

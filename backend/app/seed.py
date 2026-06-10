@@ -155,3 +155,32 @@ ORDERS = [
      "condition_claimed": "partial", "final_sale": False, "damaged_claim": False,
      "photo_proof_available": False, "payment_method": "card", "country": "India"},
 ]
+
+# --- Scenario documentation ------------------------------------------------
+# Maps each primary order to the assessment scenario it demonstrates and the
+# decision the deterministic policy engine is expected to reach. These are for
+# DEMO/ADMIN CLARITY ONLY — the agent never reads expected_decision; the policy
+# engine always decides independently.
+ORDER_SCENARIOS = {
+    "ORD-1001": ("Normal valid refund (in window, unused)", "approved"),
+    "ORD-1002": ("Secondary order (order disambiguation demo)", "approved"),
+    "ORD-1003": ("Outside window + used electronics", "denied"),
+    "ORD-1004": ("Outside refund window (non-electronics)", "denied"),
+    "ORD-1005": ("Used product within window", "denied"),
+    "ORD-1006": ("Damaged-on-arrival with photo proof", "approved"),
+    "ORD-1007": ("Damaged-on-arrival without proof", "escalated"),
+    "ORD-1008": ("Non-refundable final-sale item", "denied"),
+    "ORD-1009": ("High-value order above ₹25,000", "escalated"),
+    "ORD-1010": ("Repeat refund abuser (>3 in 90d)", "escalated"),
+    "ORD-1011": ("Missing package — escalation required", "escalated"),
+    "ORD-1012": ("Gift order — store credit", "store_credit"),
+    "ORD-1013": ("International order — manual review", "escalated"),
+    "ORD-1014": ("Cancelled order — no duplicate refund", "already_cancelled"),
+    "ORD-1015": ("Warranty claim after refund window", "warranty_support"),
+    "ORD-1016": ("Partial refund (multi-item order)", "approved"),
+}
+
+for _o in ORDERS:
+    _label, _exp = ORDER_SCENARIOS.get(_o["order_id"], ("", ""))
+    _o.setdefault("scenario_label", _label)
+    _o.setdefault("expected_decision", _exp)

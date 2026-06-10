@@ -79,6 +79,12 @@ def get_policy() -> PolicyResponse:
     )
 
 
+@app.post("/agent/run", response_model=ChatResponse)
+def agent_run(req: ChatRequest) -> ChatResponse:
+    """Alias for /chat — runs the LangGraph agent for one turn."""
+    return chat(req)
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest) -> ChatResponse:
     if not database.get_customer(req.customer_id):
