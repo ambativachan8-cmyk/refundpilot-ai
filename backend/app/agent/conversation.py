@@ -159,6 +159,11 @@ def evaluate(
     #     it; without proof, request proof then route to manual review (the item CAN
     #     still be refunded once damage is verified — unlike a pure defect claim).
     if is_damage:
+        # Outside the refund window, a damage claim is a warranty/manual-review
+        # matter — never a direct refund, even if proof exists.
+        if not within:
+            return out("warranty_support", "warranty_support", "none",
+                       reason="Damage reported outside the refund window — routed to warranty review.")
         if base_decision == "approved":
             return out("approved", "approved", "none",
                        reason="Damaged on arrival with proof — approved.")

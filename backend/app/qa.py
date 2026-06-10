@@ -247,6 +247,65 @@ FLOWS: list[dict[str, Any]] = [
         "customer": "CUST-013",
         "turns": [{"msg": "take back the product", "decision_in": {"already_cancelled"}}],
     },
+    # --- Latest live transcripts (set 3: eligibility / window / damage wording) ---
+    {
+        "name": "Defect -> eligibility question (conditional answer)",
+        "customer": "CUST-001",
+        "turns": [
+            {"msg": "i want to return my headphones", "not_approved": True},
+            {"msg": "defective", "not_approved": True,
+             "stage_in": {"waiting_for_proof", "under_manual_review"}},
+            {"msg": "The issue is internal/software-related and cannot be shown clearly in a photo.",
+             "not_approved": True, "stage_in": {"under_manual_review", "warranty_support"}},
+            {"msg": "am i eligible for the refund if the headphones are really defective after manual review?",
+             "not_approved": True, "response_contains": ["eligible"],
+             "response_not_contains": ["already logged"]},
+        ],
+    },
+    {
+        "name": "Smartwatch damaged but outside electronics window",
+        "customer": "CUST-002",
+        "turns": [
+            {"msg": "am i eligible for refund my watch is damaged", "not_approved": True,
+             "decision_in": {"warranty_support", "escalated"},
+             "response_contains": ["window"]},
+            {"msg": "I have attached photo/video proof of the issue.", "proof_attached": True,
+             "not_approved": True, "response_contains": ["proof"]},
+        ],
+    },
+    {
+        "name": "Cookware: refund-window question answered directly",
+        "customer": "CUST-003",
+        "turns": [
+            {"msg": "my cookware set is not working properly", "not_approved": True,
+             "decision_in": {"warranty_support"}},
+            {"msg": "how many days was the refund window?", "not_approved": True,
+             "response_contains": ["30 days"], "response_not_contains": ["business days"]},
+            {"msg": "i am asking about the refund window how many days were you offering?",
+             "not_approved": True, "response_contains": ["30 days", "outside"]},
+        ],
+    },
+    {
+        "name": "Running shoes torn -> proof -> manual review (no software talk)",
+        "customer": "CUST-004",
+        "turns": [
+            {"msg": "my running shoes are torn", "not_approved": True,
+             "stage_in": {"waiting_for_proof", "under_manual_review"},
+             "response_not_contains": ["software", "bluetooth"]},
+            {"msg": "I have attached photo/video proof of the issue.", "proof_attached": True,
+             "not_approved": True, "stage_in": {"under_manual_review"},
+             "response_contains": ["proof"]},
+        ],
+    },
+    {
+        "name": "Ceramic minor scratches -> approved citing damage record",
+        "customer": "CUST-005",
+        "turns": [
+            {"msg": "i want to return my dinner set its not perfect and i didnt like it it has "
+                    "very minor scratches which doesnt appear in a photo",
+             "decision_in": {"approved"}, "response_contains": ["record"]},
+        ],
+    },
 ]
 
 

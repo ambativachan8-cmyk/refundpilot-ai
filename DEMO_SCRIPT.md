@@ -162,8 +162,16 @@ an **Escalated** decision and a `warning` log on the high-value rule.
 - **Warranty timeline (with a typo)** — CUST-014 "coffee machine is not working", then:
   > **hoq maany days will it take ?**
   → "It tolerates the typo and gives the *warranty* timeline — 2–5 business days —
-  not the manual-review timeline. Every one of these replies came back in well under
-  a second; the admin log shows a `timing` entry per request."
+  not the manual-review timeline."
+
+- **Policy questions answered as policy** — CUST-003 "my cookware set is not working
+  properly" (delivered 40 days ago → warranty), then:
+  > **how many days was the refund window?**
+  → "It answers the *policy* question — 30 days standard / 15 days electronics, and
+  this order is outside its window — instead of giving a review timeline. And an
+  'am I eligible…?' question gets a conditional eligibility answer based on the case
+  stage. Every one of these replies came back in well under a second; the admin log
+  shows a `timing` entry per request."
 
 ## 5. Admin logs walkthrough (~1:00)
 

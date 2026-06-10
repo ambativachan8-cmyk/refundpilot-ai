@@ -230,8 +230,9 @@ export function ChatPanel({
         )}
       </div>
 
-      {/* proof workflow (shown when the agent is verifying a defect claim) */}
-      {(stage === "waiting_for_proof" || stage === "under_manual_review") && (
+      {/* proof workflow — shown while verifying a claim, hidden once proof is attached */}
+      {(stage === "waiting_for_proof" ||
+        (stage === "under_manual_review" && proofState !== "attached")) && (
         <div className="border-t border-white/10 bg-amber-500/[0.04] px-4 py-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <button

@@ -28,6 +28,8 @@ MESSAGE_INTENTS = (
     "approval_owner_question",
     "process_explanation_question",
     "warranty_question",
+    "refund_window_question",
+    "eligibility_question",
     "replacement_question",
     "refund_or_replacement_question",
     "human_agent_request",
@@ -43,6 +45,7 @@ MESSAGE_INTENTS = (
 FOLLOWUP_QUESTION_INTENTS = {
     "timeline_question", "status_question", "next_step_question",
     "approval_owner_question", "process_explanation_question", "warranty_question",
+    "refund_window_question", "eligibility_question",
     "replacement_question", "refund_or_replacement_question", "human_agent_request",
     "frustration_or_complaint", "pressure_or_manipulation", "thanks_or_acknowledgement",
     "general_question",
@@ -133,6 +136,18 @@ _REPLACEMENT = re.compile(
 )
 _WARRANTY = re.compile(r"\bwarrant(y|ies)\b", re.IGNORECASE)
 _DAMAGE = re.compile(r"\b(damage[sd]?|crack(s|ed)?|broke(n)?|dent(s|ed)?|scratch(ed|es)?|shatter)\b", re.IGNORECASE)
+# "how many days was the refund window?" — a POLICY question, not a timeline one.
+_REFUND_WINDOW = re.compile(
+    r"(refund|return)\s+window|window\s+(for\s+)?(refund|return)s?"
+    r"|days\s+(were|are)\s+you\s+offering|how\s+many\s+days\s+(do|did)\s+(i|we)\s+have\s+to\s+return",
+    re.IGNORECASE,
+)
+# "am I eligible…" — answered conditionally from policy + case stage.
+_ELIGIBILITY = re.compile(
+    r"(am|are)\s+(i|we)\s+(still\s+)?eligible|eligib(le|ility)\s+for|do\s+(i|we)\s+qualify"
+    r"|will\s+(i|we)\s+(be\s+eligible|qualify)|can\s+(i|we)\s+(still\s+)?(get|claim)\s+(a\s+|the\s+|my\s+)?refund",
+    re.IGNORECASE,
+)
 _REFUND = re.compile(r"\b(refund|return|money\s+back|reimburse)\b", re.IGNORECASE)
 _CONDITION = re.compile(
     r"\b(un-?used|haven'?t\s+used|not\s+used|never\s+used|delivered|days\s+ago|"
@@ -171,6 +186,12 @@ def classify_keyword(
         return "replacement_question"
     if _WARRANTY.search(m):
         return "warranty_question"
+    # Policy questions outrank timeline ("how many days was the refund WINDOW?")
+    # and the defect keyword ("am I eligible if it's really DEFECTIVE?").
+    if _REFUND_WINDOW.search(m):
+        return "refund_window_question"
+    if _ELIGIBILITY.search(m):
+        return "eligibility_question"
     if _TIMELINE.search(m):
         return "timeline_question"
     if _STATUS.search(m):

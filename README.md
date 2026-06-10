@@ -231,7 +231,7 @@ policy rules), **`/crm`** (the 15 mock profiles + their scenario labels), and
 
 ```bash
 cd backend
-pytest                 # 69 tests: policy, intent, multi-turn conversation, scenario matrix
+pytest                 # 74 tests: policy, intent, multi-turn conversation, scenario matrix
 ```
 
 **Scenario QA matrix** — a readable pass/fail sweep of ~15 realistic conversations
@@ -378,7 +378,11 @@ believing proof exists. Proof storage is **simulated** for this prototype (see
   re-deciding** (e.g. "Who will process the refund?" → returns-team / payment-processor
   answer; "cant you refund?" on a high-value case → manual-approval explanation, not a
   repeated clarification). **Warranty cases** answer their own timeline (~2–5 business
-  days). **Typo-tolerant** for demo phrases ("hoq maany days", "defect6ive").
+  days). **Policy questions are answered as policy questions**: "how many days was the
+  refund window?" cites the 30/15-day windows and whether this order is inside or
+  outside — never the review timeline; "am I eligible…?" gets a conditional,
+  stage-aware eligibility answer. **Typo-tolerant** for demo phrases ("hoq maany
+  days", "defect6ive").
 - **Damaged-on-arrival vs defect**: a damage claim can still be refunded once verified
   (proof → manual review → possible refund), whereas a pure defect/not-working claim is
   never auto-approved. Proof state is conflict-safe: attaching proof after "can't show
