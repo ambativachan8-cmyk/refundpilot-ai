@@ -222,7 +222,7 @@ App at http://localhost:3000 (chat) and http://localhost:3000/admin (logs).
 
 ```bash
 cd backend
-pytest                 # 60 tests: policy, intent, multi-turn conversation, scenario matrix
+pytest                 # 65 tests: policy, intent, multi-turn conversation, scenario matrix
 ```
 
 **Scenario QA matrix** — a readable pass/fail sweep of ~15 realistic conversations
@@ -354,6 +354,25 @@ Only an explicit button press or a strong phrase (“I have attached proof”) c
 a bare mention of the word “photo” never does, so the agent can’t be talked into
 believing proof exists. Proof storage is **simulated** for this prototype (see
 *Known limitations*).
+
+### Conversation intelligence (categories, follow-ups & speed)
+
+- **Product-issue categories** (`agent/category.py`): the agent distinguishes
+  `safety_hazard`, `size_or_fit_issue`, `mismatch_or_wrong_item`, `visible_damage`,
+  `internal_electronics_issue`, `defect_electronics`, etc. — so a shoe fit problem
+  isn't treated like a software bug, and an **electric-shock report triggers an
+  urgent safety escalation** ("stop using it and unplug it"), not generic clarification.
+- **Follow-up intents** (`agent/message_intent.py`): timeline / status / next-step /
+  **approval-owner** / process / warranty / replacement / human-agent / frustration /
+  pressure. On a settled or in-review case these are answered **without re-deciding**
+  (e.g. "Who will process the refund?" returns a returns-team / payment-processor
+  answer, never a repeated proof request).
+- **Deterministic-first + fast path**: keyword extraction is authoritative for clear
+  messages; the LLM is consulted **only** for genuinely ambiguous text, and reply
+  rephrasing is off by default (`LLM_REPHRASE`). Result: typical responses are
+  **~0.5s** even with Ollama running (the small model was previously misclassifying
+  clean returns as defects *and* adding 10–15s of latency). Each `/chat` logs a
+  `timing` entry with total agent time.
 
 ### Why the LLM cannot override policy
 

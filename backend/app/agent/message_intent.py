@@ -25,12 +25,28 @@ MESSAGE_INTENTS = (
     "timeline_question",
     "status_question",
     "next_step_question",
+    "approval_owner_question",
+    "process_explanation_question",
+    "warranty_question",
+    "replacement_question",
+    "refund_or_replacement_question",
+    "human_agent_request",
+    "frustration_or_complaint",
     "pressure_or_manipulation",
     "clarification_answer",
     "thanks_or_acknowledgement",
     "general_question",
     "unknown",
 )
+
+# Question types that are answered as follow-ups (never re-decide the refund).
+FOLLOWUP_QUESTION_INTENTS = {
+    "timeline_question", "status_question", "next_step_question",
+    "approval_owner_question", "process_explanation_question", "warranty_question",
+    "replacement_question", "refund_or_replacement_question", "human_agent_request",
+    "frustration_or_complaint", "pressure_or_manipulation", "thanks_or_acknowledgement",
+    "general_question",
+}
 
 _PRESSURE = re.compile(
     r"(approve\s+(it|this|the\s+refund)?\s*(now|immediately|right\s+now|asap)|"
@@ -71,6 +87,38 @@ _PROOF_UNAVAIL = re.compile(
     r"|software|bluetooth|internal|firmware",
     re.IGNORECASE,
 )
+_APPROVAL_OWNER = re.compile(
+    r"who\s+(will|can|is\s+going\s+to|would)\s+(approve|process|handle|review|decide|author(i[sz]e))"
+    r"|who\s+(approves|processes|handles|reviews|decides)|who'?s\s+(approving|processing)",
+    re.IGNORECASE,
+)
+_PROCESS = re.compile(
+    r"(what\s+(kind\s+of\s+)?steps|what'?s?\s+the\s+process|how\s+does\s+(the\s+|this\s+)?"
+    r"(process|review)\s+work|what\s+is\s+involved|what'?s\s+involved|explain\s+the\s+process|"
+    r"walk\s+me\s+through|what\s+happens\s+(during|in)\s+(the\s+)?review)",
+    re.IGNORECASE,
+)
+_HUMAN = re.compile(
+    r"(talk\s+to\s+(a\s+)?(human|person|agent|representative|someone)|human\s+(agent|support|person)|"
+    r"speak\s+(to|with)\s+(a\s+)?(human|person|agent|representative|someone)|real\s+person|"
+    r"live\s+agent|customer\s+care|customer\s+service\s+(rep|agent)|escalate\s+to\s+(a\s+)?human)",
+    re.IGNORECASE,
+)
+_FRUSTRATION = re.compile(
+    r"(frustrat|annoy(ed|ing)|ridiculous|fed\s+up|unacceptable|this\s+is\s+(bad|terrible|awful)|"
+    r"waste\s+of\s+(my\s+)?time|so\s+(slow|bad)|disappoint)",
+    re.IGNORECASE,
+)
+_REFUND_OR_REPLACEMENT = re.compile(
+    r"(refund\s+or\s+(a\s+)?(replacement|replace|exchange)|(replacement|replace|exchange)\s+or\s+(a\s+)?refund)",
+    re.IGNORECASE,
+)
+_REPLACEMENT = re.compile(
+    r"(replacement|replace\s+it|replace\s+the|can\s+i\s+(get|have)\s+(a\s+)?(replacement|exchange)|"
+    r"want\s+(a\s+)?(replacement|exchange)|send\s+(me\s+)?(a\s+)?(new|replacement)|exchange\s+it)",
+    re.IGNORECASE,
+)
+_WARRANTY = re.compile(r"\bwarrant(y|ies)\b", re.IGNORECASE)
 _REFUND = re.compile(r"\b(refund|return|money\s+back|reimburse)\b", re.IGNORECASE)
 _CONDITION = re.compile(
     r"\b(un-?used|haven'?t\s+used|not\s+used|never\s+used|delivered|days\s+ago|"
@@ -90,8 +138,25 @@ def classify_keyword(
     if proof_unavailable:
         return "proof_unavailable"
     m = message or ""
+    # Pressure / human / frustration first (highest-signal follow-ups).
     if _PRESSURE.search(m):
         return "pressure_or_manipulation"
+    if _HUMAN.search(m):
+        return "human_agent_request"
+    if _FRUSTRATION.search(m):
+        return "frustration_or_complaint"
+    # Specific question types BEFORE the greedy "refund/return" keyword, so e.g.
+    # "who will process the refund?" is an owner question, not a new refund request.
+    if _APPROVAL_OWNER.search(m):
+        return "approval_owner_question"
+    if _PROCESS.search(m):
+        return "process_explanation_question"
+    if _REFUND_OR_REPLACEMENT.search(m):
+        return "refund_or_replacement_question"
+    if _REPLACEMENT.search(m):
+        return "replacement_question"
+    if _WARRANTY.search(m):
+        return "warranty_question"
     if _TIMELINE.search(m):
         return "timeline_question"
     if _STATUS.search(m):
@@ -133,11 +198,16 @@ def classify_message_intent(
     proof_attached: bool = False,
     proof_unavailable: bool = False,
     prior_stage: Optional[str] = None,
+    allow_llm: bool = True,
 ) -> tuple[str, str]:
     """Return (message_intent, method). Keyword result is authoritative unless it
-    is 'unknown' and an LLM is available to refine it."""
+    is 'unknown' and an LLM is available to refine it.
+
+    `allow_llm` is set False on the first turn of a conversation, where the message
+    intent doesn't change the refund decision — this avoids a slow LLM call for a
+    label that won't be used (big latency win)."""
     kw = classify_keyword(message, proof_attached, proof_unavailable, prior_stage)
-    if kw != "unknown" or not llm.is_enabled():
+    if kw != "unknown" or not allow_llm or not llm.is_enabled():
         return kw, "keyword"
     data = llm.call_json(_LLM_SYSTEM, f'Message: "{message}"', max_tokens=40)
     if data and data.get("message_intent") in MESSAGE_INTENTS:

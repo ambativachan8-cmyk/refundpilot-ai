@@ -17,6 +17,7 @@ from typing import Any
 
 from .. import config
 from ..schemas import RefundIntent
+from . import category as _category
 from . import prompts
 
 # --- Keyword sets for the deterministic fallback ---------------------------
@@ -184,6 +185,7 @@ def fallback_extract(message: str) -> dict[str, Any]:
         "product_condition_claimed": condition,
         "proof_mentioned": proof,
         "proof_unavailable": proof_unavailable,
+        "issue_category": _category.classify_issue_category(msg),
         "order_id_mentioned": order_id,
         "urgency_or_sentiment": sentiment,
         "needs_clarification": needs_clarification,
@@ -196,23 +198,37 @@ def fallback_extract(message: str) -> dict[str, Any]:
 def extract_intent(message: str) -> tuple[dict[str, Any], str, str]:
     """Return (intent_dict, method, note).
 
-    method: "llm" or "fallback". note: short reason (e.g. fallback cause / provider).
-    Uses the active provider (OpenAI or Ollama) when available, otherwise the
-    deterministic keyword extractor. Any LLM failure falls back silently.
+    Deterministic-FIRST: the keyword extractor is authoritative whenever it finds a
+    clear signal (a known reason, a product-issue category, or a non-refund intent
+    type). This is fast and far more reliable than a small local model — which was
+    mislabelling clean returns and fit issues as defects. The LLM is only consulted
+    for genuinely ambiguous messages, and even then its output is validated and
+    falls back on any problem.
     """
     from .. import llm
 
-    if llm.is_enabled():
-        data = llm.call_json(
-            prompts.INTENT_SYSTEM_PROMPT,
-            prompts.INTENT_USER_TEMPLATE.format(message=message),
-            max_tokens=300,
-        )
-        if data is not None:
-            try:
-                intent = RefundIntent.model_validate(data).model_dump()
-                return intent, "llm", f"structured extraction ({llm.resolve_provider()})"
-            except Exception:  # noqa: BLE001 - malformed LLM JSON -> fall back
-                pass
-        return fallback_extract(message), "fallback", "llm unavailable/invalid — keyword extraction"
-    return fallback_extract(message), "fallback", "no LLM provider — keyword extraction"
+    fb = fallback_extract(message)
+    clear = (
+        fb["reason"] != "unknown"
+        or fb["intent_type"] != "refund_request"
+        or fb["issue_category"] != "unknown"
+        or fb.get("needs_clarification")
+    )
+    if clear or not llm.is_enabled():
+        return fb, "fallback", "deterministic keyword extraction"
+
+    # Ambiguous + an LLM is available -> let it try, but keep the category and
+    # validate the result; fall back on any issue.
+    data = llm.call_json(
+        prompts.INTENT_SYSTEM_PROMPT,
+        prompts.INTENT_USER_TEMPLATE.format(message=message),
+        max_tokens=300,
+    )
+    if data is not None:
+        try:
+            data.setdefault("issue_category", fb["issue_category"])
+            intent = RefundIntent.model_validate(data).model_dump()
+            return intent, "llm", f"ambiguous — LLM refine ({llm.resolve_provider()})"
+        except Exception:  # noqa: BLE001 - malformed LLM JSON -> fall back
+            pass
+    return fb, "fallback", "ambiguous — LLM unavailable, keyword extraction"

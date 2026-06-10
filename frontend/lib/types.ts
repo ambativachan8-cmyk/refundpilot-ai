@@ -72,6 +72,8 @@ export interface ChatResponse {
   stage: Stage;
   pending_requirement: string;
   turn_count: number;
+  message_intent?: string;
+  issue_category?: string;
   response: string;
   customer: Customer | null;
   order: Order | null;

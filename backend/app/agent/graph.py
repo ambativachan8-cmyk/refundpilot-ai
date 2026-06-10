@@ -12,6 +12,7 @@ Nodes:
 """
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from .. import database
@@ -73,7 +74,9 @@ def node_load_session(state: AgentState) -> dict[str, Any]:
 
 def node_extract_intent(state: AgentState) -> dict[str, Any]:
     message = state.get("user_message", "")
+    t0 = time.perf_counter()
     intent, method, note = tools.extract_intent(message)
+    ms = int((time.perf_counter() - t0) * 1000)
     # Explicit proof buttons from the UI override/augment text-derived signals.
     if state.get("req_proof_attached"):
         intent["proof_mentioned"] = True
@@ -86,8 +89,8 @@ def node_extract_intent(state: AgentState) -> dict[str, Any]:
     status = "warning" if intent.get("needs_clarification") else "success"
     summary = (
         f"type={intent.get('intent_type')} reason={intent.get('reason')} "
-        f"condition={intent.get('product_condition_claimed')} "
-        f"proof={intent.get('proof_mentioned')} conf={intent.get('confidence')}"
+        f"category={intent.get('issue_category')} "
+        f"proof={intent.get('proof_mentioned')} unavail={intent.get('proof_unavailable')} [{ms}ms]"
     )
     upd = _log(state, "extract_intent", "extract_intent",
                f"method={method} ({note})", summary, status=status)
@@ -103,6 +106,8 @@ def node_classify_message(state: AgentState) -> dict[str, Any]:
         proof_attached=bool(state.get("req_proof_attached")),
         proof_unavailable=bool(state.get("req_proof_unavailable")),
         prior_stage=prior.get("stage"),
+        # Only spend an LLM call on follow-ups, where the message intent matters.
+        allow_llm=bool(prior),
     )
     upd = _log(state, "classify_message", "classify_message_intent",
                f"method={method} prior_stage={prior.get('stage')}",
@@ -226,14 +231,16 @@ def node_generate_response(state: AgentState) -> dict[str, Any]:
     decision = state.get("decision", "escalated")
     conv = state.get("conv") or {}
     proof_received = bool(conv.get("proof_received"))
+    t0 = time.perf_counter()
     response, mode = decisions.generate_response(
         decision, state["customer"], state["order"],
         state.get("policy_checks", []), state.get("user_message", ""),
         state.get("intent"), state.get("stage"), state.get("pending_requirement"),
         proof_received, conv.get("followup"), state.get("message_intent"),
     )
+    ms = int((time.perf_counter() - t0) * 1000)
     upd = _log(state, "generate_response", "generate_response",
-               f"mode={mode}", f"Generated {len(response)}-char reply",
+               f"mode={mode}", f"Generated {len(response)}-char reply [{ms}ms]",
                snapshot=decision)
     upd["customer_response"] = response
     upd["llm_mode"] = mode
@@ -406,7 +413,15 @@ def run_agent(
         "retry_count": 0,
         "llm_mode": "deterministic",
     }
+    t0 = time.perf_counter()
     if LANGGRAPH_AVAILABLE and _COMPILED is not None:
-        result = _COMPILED.invoke(state)
-        return result  # type: ignore[return-value]
-    return _run_sequential(state)
+        result: AgentState = _COMPILED.invoke(state)  # type: ignore[assignment]
+    else:
+        result = _run_sequential(state)
+    total_ms = int((time.perf_counter() - t0) * 1000)
+    tools.save_reasoning_log(
+        session_id, "timing", "timing", f"intent_method={result.get('intent_method')}",
+        f"total /chat agent time: {total_ms}ms", "success",
+        decision_snapshot=result.get("decision"),
+    )
+    return result

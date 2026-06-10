@@ -37,6 +37,16 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
   works offline with no key; every call is timed and falls back safely. `/health`
   shows `llm_provider`, `llm_model`, `ollama_reachable`. The LLM never decides
   outcomes; precise operational/follow-up replies are kept verbatim.
+- ✅ **Product-issue categories** (`agent/category.py`) — safety_hazard (urgent
+  escalation), size/fit, mismatch/wrong-item, visible damage, internal-electronics,
+  etc. Fixes the real failures: clean returns no longer become defects, shoe-fit
+  isn't "software", electric-shock is a safety escalation not a generic question.
+- ✅ **Rich follow-up intents** — timeline/status/next-step/approval-owner/process/
+  warranty/replacement/human/frustration/pressure, answered without re-deciding.
+  "Who will process the refund?" no longer repeats the proof template.
+- ✅ **Latency** — deterministic-first + fast path → typical responses **~0.5s**
+  (was 10–15s). LLM only for ambiguous follow-ups; rephrasing off by default. Each
+  `/chat` logs a `timing` entry.
 - ✅ Failures / warnings / ambiguous cases visible (missing order → `handle_error`
   failed log; ambiguous order → warning; defect-no-proof → warning).
 
@@ -88,7 +98,7 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
 | 17 | **Defect → "I cannot provide proof" (same session)** | **not approved** | `test_agent` |
 | 18 | **Clarify ("return my product") → then "unused, 5 days"** | escalated → approved | `test_agent` |
 
-**Verification:** `pytest` → 60 passed · `manual_qa_matrix.py` → 24/24 checks pass ·
+**Verification:** `pytest` → 65 passed · `manual_qa_matrix.py` → 36/36 checks pass ·
 `npx tsc --noEmit` clean · `npm run build` clean · live HTTP smoke (Ollama active,
 `provider=ollama`, `qwen2.5:3b`) confirms: clean approval + "how much time?" →
 refund timeline (not repeated); defect + proof attached + "how long?" → manual-review

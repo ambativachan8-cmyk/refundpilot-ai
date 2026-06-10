@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from ..policy import window_days_for
+from .message_intent import FOLLOWUP_QUESTION_INTENTS
 
 
 def _within_window(order: dict[str, Any]) -> bool:
@@ -25,10 +26,8 @@ SETTLED_STAGES = {
     "approved", "denied", "under_manual_review",
     "warranty_support", "store_credit", "already_cancelled",
 }
-FOLLOWUP_INTENTS = {
-    "timeline_question", "status_question", "next_step_question",
-    "pressure_or_manipulation", "thanks_or_acknowledgement", "general_question",
-}
+# Follow-up question types that should be answered without re-deciding.
+FOLLOWUP_INTENTS = FOLLOWUP_QUESTION_INTENTS
 
 
 def evaluate(
@@ -64,16 +63,20 @@ def evaluate(
         or bool(order.get("photo_proof_available"))
     )
     needs_clar = bool(intent.get("needs_clarification"))
+    issue_category = intent.get("issue_category", "unknown")
+    is_safety = issue_category == "safety_hazard"
+    is_fit = issue_category in ("size_or_fit_issue", "mismatch_or_wrong_item")
 
     prior_stage = prior.get("stage")
     prior_defect = bool(prior.get("defect_claim_active"))
     prior_proof_received = bool(prior.get("proof_received"))
 
-    # A defect claim is "active" if it was raised this turn, earlier in the
-    # session, or the policy engine routed to warranty (out-of-window defect).
-    # Damaged-on-arrival (handled by the policy engine with photo proof) is NOT
-    # treated as a defect claim, so those can still approve.
-    defect_active = prior_defect or defect_now or base_decision == "warranty_support"
+    # A claim keeps the case "active" (no later clean message can auto-approve it)
+    # when it's a defect, a safety hazard, or routed to warranty. Damaged-on-arrival
+    # (handled by the policy engine with photo proof) is NOT treated this way.
+    defect_active = (
+        prior_defect or defect_now or is_safety or base_decision == "warranty_support"
+    )
 
     def out(decision, stage, pending, *, proof_required=False,
             proof_received=False, reason="", clar=None, followup=None):
@@ -111,20 +114,31 @@ def evaluate(
                        reason="Repeated defect/clarification — case already under review.",
                        followup="repeat_defect")
 
-    # 1) Terminal policy outcomes the conversation layer must not loosen.
-    if base_decision == "denied":
-        return out("denied", "denied", "none", reason="Policy violation — refund denied.")
-    if base_decision == "store_credit":
-        return out("store_credit", "store_credit", "none", reason="Gift order — store credit.")
-    if base_decision == "already_cancelled":
+    # 1) HARD terminals that nothing (not even a safety/fit claim) loosens.
+    if order.get("status") == "cancelled" or base_decision == "already_cancelled":
         return out("already_cancelled", "already_cancelled", "none",
                    reason="Order already cancelled.")
+    if bool(order.get("final_sale")):
+        return out("denied", "denied", "none", reason="Final-sale item — non-refundable.")
+    if base_decision == "store_credit":
+        return out("store_credit", "store_credit", "none", reason="Gift order — store credit.")
+
+    # 1a) Safety hazard (electric shock, fire, overheating) — urgent escalation,
+    #     never auto-approve, never ask for a photo first.
+    if is_safety:
+        return out("escalated", "under_manual_review", "manual_review",
+                   reason="Safety hazard reported — prioritised for urgent review.")
 
     # 2) Defect / not-working claim — never auto-approve.
     if defect_active:
         if not within:
             return out("warranty_support", "warranty_support", "none",
                        reason="Defect reported outside the refund window — routed to warranty.")
+        # Never regress a case that's already under review back to asking for proof.
+        if prior_stage == "under_manual_review":
+            return out("escalated", "under_manual_review", "manual_review",
+                       proof_received=prior_proof_received,
+                       reason="Defect already under manual review.")
         if proof_unavailable:
             return out("escalated", "under_manual_review", "manual_review",
                        reason="Defect can't be shown in a photo (internal/software) — sent to manual review.")
@@ -140,6 +154,16 @@ def evaluate(
         return out("escalated", "waiting_for_proof", "provide_photo_or_video_proof",
                    proof_required=True,
                    reason="Defect claim — photo/video proof requested before any refund.")
+
+    # 2a) Size / fit / wrong-item — NOT a software/internal issue. Route to a
+    #     return/exchange eligibility review (unless it's a clean approvable return).
+    if is_fit and base_decision != "approved":
+        return out("escalated", "under_manual_review", "manual_review",
+                   reason=f"{issue_category} — checking return/exchange eligibility.")
+
+    # 2b) Plain policy denial (out-of-window / used) with no fit/defect/safety angle.
+    if base_decision == "denied":
+        return out("denied", "denied", "none", reason="Refund denied under policy.")
 
     # 3) Non-defect escalations / warranty from the policy engine.
     if base_decision == "warranty_support":

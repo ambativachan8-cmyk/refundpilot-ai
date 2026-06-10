@@ -104,6 +104,7 @@ def chat(req: ChatRequest) -> ChatResponse:
         intent=result.get("intent"),
         intent_method=result.get("intent_method", "fallback"),
         message_intent=result.get("message_intent", "unknown"),
+        issue_category=(result.get("intent") or {}).get("issue_category", "unknown"),
         customer=result.get("customer"),
         order=result.get("order"),
         policy_checks=result.get("policy_checks", []),

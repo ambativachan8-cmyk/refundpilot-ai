@@ -130,6 +130,27 @@ the admin tab the `classify_message` (message_intent), `load_session_state`
 (Optional 20s) Click **"High-value escalation"** (CUST-008, ₹84,999 laptop) to show
 an **Escalated** decision and a `warning` log on the high-value rule.
 
+## 4b. Demo — product-issue understanding & speed (~1:30)
+
+> "The agent understands the *kind* of problem, not just keywords — and it's fast."
+
+- **New conversation**, customer **CUST-004 (Priya)**, send:
+  > **My shoes are not fitting exactly, one shoe is big and the other is small.**
+  → "Notice it calls this a **fit/size issue**, explicitly *not* a software/internal
+  problem, and routes it to the returns team — the Case Status bar shows
+  `Issue: size or fit issue`."
+
+- **New conversation**, customer **CUST-006 (Ananya)**, send:
+  > **the table lamp gives me an electric shock when I touch it**
+  → "This is a **safety hazard** — the agent tells the customer to stop using it and
+  unplug it, and escalates urgently. It doesn't ask a generic clarification question."
+
+- Back on the **approved** headphones conversation, ask:
+  > **Who will process the refund?**
+  → "It answers the actual question — returns team and payment processor — instead
+  of repeating the refund decision. Every one of these replies came back in well
+  under a second; the admin log shows a `timing` entry per request."
+
 ## 5. Admin logs walkthrough (~1:00)
 
 - Switch to the **/admin** tab.

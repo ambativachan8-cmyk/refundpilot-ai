@@ -55,6 +55,7 @@ export function ChatPanel({
   const [tts, setTts] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [stage, setStage] = useState<Stage | null>(null);
+  const [issueCategory, setIssueCategory] = useState<string>("unknown");
   const [proofState, setProofState] = useState<"attached" | "unavailable" | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -66,7 +67,15 @@ export function ChatPanel({
     setMessages([]);
     setSessionId(null);
     setStage(null);
+    setIssueCategory("unknown");
     setProofState(null);
+  }
+
+  function ownerForStage(s: Stage | null): string {
+    if (s === "approved") return "Returns team / payment processor";
+    if (s === "denied" || s === "store_credit" || s === "already_cancelled" || s === "needs_clarification")
+      return "AI agent";
+    return "Support specialist";
   }
 
   async function send(
@@ -93,6 +102,7 @@ export function ChatPanel({
       const r = await api.chat(customerId, msg, useSession, proof);
       setSessionId(r.session_id);
       setStage(r.stage);
+      if (r.issue_category) setIssueCategory(r.issue_category);
       setMessages((m) => [...m, { role: "agent", text: r.response, decision: r.decision }]);
       onResult(r);
       if (tts && typeof window !== "undefined" && window.speechSynthesis) {
@@ -178,11 +188,22 @@ export function ChatPanel({
                 : "—"}
             </span>
           </span>
+          {issueCategory && issueCategory !== "unknown" && (
+            <span className="text-slate-400">
+              Issue:{" "}
+              <span className="font-medium capitalize text-slate-200">
+                {issueCategory.replace(/_/g, " ")}
+              </span>
+            </span>
+          )}
           <span className="text-slate-400">
             Next: <span className="font-medium text-slate-200">{STAGE_META[stage]?.next}</span>
           </span>
           <span className="text-slate-400">
             ETA: <span className="font-medium text-slate-200">{STAGE_META[stage]?.eta}</span>
+          </span>
+          <span className="text-slate-400">
+            Owner: <span className="font-medium text-slate-200">{ownerForStage(stage)}</span>
           </span>
         </div>
       )}

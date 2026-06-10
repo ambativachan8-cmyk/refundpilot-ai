@@ -75,6 +75,7 @@ class RefundIntent(BaseModel):
     product_condition_claimed: Literal["unused", "used", "damaged", "defective", "unknown"] = "unknown"
     proof_mentioned: bool = False
     proof_unavailable: bool = False  # customer says they CANNOT provide proof
+    issue_category: str = "unknown"  # product-issue category (see agent/category.py)
     order_id_mentioned: Optional[str] = None
     urgency_or_sentiment: Literal["calm", "frustrated", "angry", "unknown"] = "unknown"
     needs_clarification: bool = False
@@ -151,6 +152,7 @@ class ChatResponse(BaseModel):
     intent: Optional[RefundIntent] = None
     intent_method: str = "fallback"  # "llm" or "fallback"
     message_intent: str = "unknown"
+    issue_category: str = "unknown"
     customer: Optional[Customer] = None
     order: Optional[Order] = None
     policy_checks: list[PolicyCheck] = []

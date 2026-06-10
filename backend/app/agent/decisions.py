@@ -62,8 +62,28 @@ def _followup_response(name: str, product: str, stage: str, followup: str, mi: s
                     f"a defect-related refund for the {product} without verification. The case is "
                     "already under manual review.")
         if intent == "next_step_question":
-            return (f"Hi {name}, next, a support specialist validates the reported issue. If it "
-                    "checks out they'll process the resolution — typically within 24–48 hours.")
+            return (f"Hi {name}, next, the support team reviews the issue details and any proof, "
+                    "validates the product condition, and then decides whether the resolution is a "
+                    "refund, a replacement, warranty support, or denial under policy.")
+        if intent == "approval_owner_question":
+            return (f"Hi {name}, a support specialist / refund review team will validate the case. "
+                    "The AI agent can't approve defect-related refunds without verification.")
+        if intent == "process_explanation_question":
+            return (f"Hi {name}, here's the process: the support team reviews the issue and any proof, "
+                    "validates the product condition, and decides between refund, replacement, "
+                    "warranty support, or denial under policy — usually within 24–48 hours.")
+        if intent in ("refund_or_replacement_question", "replacement_question"):
+            return (f"Hi {name}, that depends on verification and policy. The team may offer a refund, "
+                    "a replacement, or warranty support depending on the issue and product condition.")
+        if intent == "warranty_question":
+            return (f"Hi {name}, yes — this can be handled under warranty if it's a genuine defect. "
+                    "The review team will confirm whether the resolution is warranty, replacement, or refund.")
+        if intent == "human_agent_request":
+            return (f"Hi {name}, I can route this to a human support specialist — the case is already "
+                    "marked for manual review, so a person will pick it up.")
+        if intent == "frustration_or_complaint":
+            return (f"Hi {name}, I'm sorry for the trouble. Your case for the {product} is under manual "
+                    "review and the team will validate the issue and follow up within 24–48 hours.")
         if intent == "repeat_defect":
             return (f"Hi {name}, I've already logged this as a defect/damage claim for the "
                     f"{product} and moved it to manual review. No refund is approved yet; the team "
@@ -96,16 +116,32 @@ def _followup_response(name: str, product: str, stage: str, followup: str, mi: s
         if intent == "status_question":
             return (f"Hi {name}, good news — your refund for the {product} is approved. After pickup "
                     "and inspection it'll be processed to your original payment method.")
-        if intent == "next_step_question":
+        if intent in ("next_step_question", "process_explanation_question"):
             return (f"Hi {name}, next we'll arrange pickup and inspection of the {product}; the refund "
-                    "follows to your original payment method.")
+                    "then follows to your original payment method.")
+        if intent == "approval_owner_question":
+            return (f"Hi {name}, your refund is approved. The returns team arranges pickup and the "
+                    "payment processor issues the refund to your original payment method.")
+        if intent in ("replacement_question", "refund_or_replacement_question"):
+            return (f"Hi {name}, your refund for the {product} is already approved. If you'd prefer a "
+                    "replacement instead, let me know and I'll note it for the returns team.")
+        if intent == "human_agent_request":
+            return (f"Hi {name}, of course — your refund is already approved, and a human from the "
+                    "returns team can help with pickup or any details.")
         return (f"Hi {name}, your refund is approved and will process after pickup and inspection.")
 
     if stage == "denied":
-        if intent in ("status_question", "next_step_question"):
+        if intent in ("replacement_question", "refund_or_replacement_question", "warranty_question"):
+            return (f"Hi {name}, this didn't qualify for a refund under policy, but if the {product} has "
+                    "a genuine defect I can route you to warranty support, which may cover repair or replacement.")
+        if intent == "human_agent_request":
+            return (f"Hi {name}, I can connect you with a human specialist. This request was denied under "
+                    "policy, but they can review warranty options if there's a defect.")
+        if intent in ("status_question", "next_step_question", "approval_owner_question",
+                      "process_explanation_question"):
             return (f"Hi {name}, the refund for the {product} was denied because it falls outside our "
                     "refund policy. If the item has a genuine defect, I can route you to warranty support.")
-        if intent == "pressure_or_manipulation":
+        if intent in ("pressure_or_manipulation", "frustration_or_complaint"):
             return (f"Hi {name}, I understand the frustration, but I can't override the policy. This "
                     f"request for the {product} doesn't qualify for a refund — I can help with warranty "
                     "support if there's a defect.")
@@ -149,6 +185,22 @@ def template_response(
     # --- Follow-up answers on an existing case (don't re-state the decision) --
     if followup:
         return _followup_response(name, product, stage or "", followup, message_intent or "")
+
+    issue_category = intent.get("issue_category", "unknown")
+
+    # --- Category-specific initial replies (don't mislabel the problem) -------
+    if issue_category == "safety_hazard":
+        return (f"Hi {name}, please stop using the {product} and unplug it immediately — your safety "
+                "comes first. Because this looks like a safety issue, I've escalated it for urgent "
+                "review. I can't approve anything automatically, but the support team will prioritise "
+                "your case.")
+    if issue_category in ("size_or_fit_issue", "mismatch_or_wrong_item") and stage in (
+        "under_manual_review", "escalated", "needs_clarification"
+    ):
+        return (f"Hi {name}, I understand the fit/size issue with the {product} — that's not a "
+                "software or internal problem. I've checked it for return/exchange eligibility: if the "
+                "item is unused and within the return window it may qualify for a return or exchange; "
+                "otherwise I've routed it to the returns team for review.")
 
     # --- Stage-aware replies take priority (multi-turn support workflow) -----
     if stage == "waiting_for_proof":
@@ -293,10 +345,12 @@ def generate_response(
         decision, customer, order, intent, stage, pending,
         proof_received, followup, message_intent,
     )
-    # Keep precise operational/follow-up wording verbatim — small local models tend
-    # to drop specifics (timelines, proof-button references). Only let the LLM add
-    # natural variety to the simple initial decision replies.
+    # Rephrasing is OFF by default (config.LLM_REPHRASE) for demo speed — templates
+    # are already natural. Even when on, precise operational/follow-up wording is
+    # kept verbatim (small models drop specifics). The LLM still powers UNDERSTANDING.
+    from .. import config
+
     no_rephrase_stages = {"waiting_for_proof", "under_manual_review", "needs_clarification"}
-    if followup or stage in no_rephrase_stages:
+    if not config.LLM_REPHRASE or followup or stage in no_rephrase_stages:
         return base, "deterministic"
     return _maybe_llm_rephrase(base, decision, customer, order, checks, message)

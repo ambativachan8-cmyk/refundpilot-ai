@@ -33,7 +33,13 @@ OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "").strip() or None
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").strip().rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b").strip()
 
-LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "20"))
+# Kept low for demo responsiveness — any slower call falls back to deterministic.
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "8"))
+
+# Whether to let the LLM rephrase the (already natural) reply templates. Off by
+# default: templates are fast, precise, and natural enough, which keeps demo
+# latency low. The LLM is still used for language UNDERSTANDING regardless.
+LLM_REPHRASE = os.getenv("LLM_REPHRASE", "false").strip().lower() in ("1", "true", "yes", "on")
 
 # Coarse hint only — the real, fail-safe resolution lives in app/llm.py
 # (get_llm_status / resolve_provider). The agent runs fully without any LLM.
