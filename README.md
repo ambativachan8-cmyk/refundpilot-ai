@@ -8,6 +8,10 @@ RefundPilot cannot approve a refund just because the customer asks. It must
 **tool-based policy checks**, and only then produce a decision — with a full,
 auditable reasoning trail visible in an admin dashboard.
 
+**🎥 Loom walkthrough:** https://www.loom.com/share/0b9925b554a34fa0a8a8fee3e9388495
+· **Repo:** https://github.com/ambativachan8-cmyk/refundpilot-ai
+· **Runs with no API key** (deterministic fallback — see §16).
+
 The core decision is made by a **deterministic policy engine**, so the agent can
 never "talk itself" into violating policy. An LLM (optional) is used *only* to
 phrase the final customer-facing message. With no API key, the app runs in a
