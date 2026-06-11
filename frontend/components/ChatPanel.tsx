@@ -57,18 +57,43 @@ export function ChatPanel({
   const [stage, setStage] = useState<Stage | null>(null);
   const [issueCategory, setIssueCategory] = useState<string>("unknown");
   const [proofState, setProofState] = useState<"attached" | "unavailable" | null>(null);
+  const [voiceStatus, setVoiceStatus] = useState("");
+  const [ttsSupported, setTtsSupported] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
 
+  // Detect text-to-speech support; stop any speech when the panel unmounts.
+  useEffect(() => {
+    setTtsSupported("speechSynthesis" in window);
+    return () => stopSpeaking();
+  }, []);
+
+  function stopSpeaking() {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }
+
+  // Read ONLY the customer-facing agent reply aloud — never logs or metadata.
+  function speak(text: string) {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    stopSpeaking(); // never overlap a previous reply
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "en-IN";
+    window.speechSynthesis.speak(u);
+  }
+
   function resetConversation() {
+    stopSpeaking();
     setMessages([]);
     setSessionId(null);
     setStage(null);
     setIssueCategory("unknown");
     setProofState(null);
+    setVoiceStatus("");
   }
 
   function ownerForStage(s: Stage | null): string {
@@ -105,11 +130,7 @@ export function ChatPanel({
       if (r.issue_category) setIssueCategory(r.issue_category);
       setMessages((m) => [...m, { role: "agent", text: r.response, decision: r.decision }]);
       onResult(r);
-      if (tts && typeof window !== "undefined" && window.speechSynthesis) {
-        const u = new SpeechSynthesisUtterance(r.response);
-        u.lang = "en-IN";
-        window.speechSynthesis.speak(u);
-      }
+      if (tts) speak(r.response);
     } catch {
       setMessages((m) => [
         ...m,
@@ -157,15 +178,25 @@ export function ChatPanel({
             New conversation
           </button>
           <button
-            onClick={() => setTts((v) => !v)}
+            onClick={() => {
+              if (tts) stopSpeaking(); // turning off silences any ongoing reply
+              setTts(!tts);
+            }}
+            disabled={!ttsSupported}
             className={`rounded-lg border px-2.5 py-1 text-xs transition ${
-              tts
+              !ttsSupported
+                ? "cursor-not-allowed border-white/10 text-slate-600"
+                : tts
                 ? "border-indigo-400/50 bg-indigo-500/15 text-indigo-300"
                 : "border-white/10 text-slate-400 hover:text-white"
             }`}
-            title="Read agent replies aloud"
+            title={
+              ttsSupported
+                ? "Read agent replies aloud"
+                : "Voice replies are not supported in this browser."
+            }
           >
-            🔊 {tts ? "on" : "off"}
+            🔊 {ttsSupported ? (tts ? "on" : "off") : "n/a"}
           </button>
         </div>
       </div>
@@ -280,7 +311,10 @@ export function ChatPanel({
       {/* input */}
       <div className="border-t border-white/10 px-4 py-3">
         <div className="flex items-center gap-2">
-          <VoiceButton onTranscript={(t) => setInput((p) => (p ? `${p} ${t}` : t))} />
+          <VoiceButton
+            onTranscript={(t) => setInput((p) => (p ? `${p} ${t}` : t))}
+            onStatus={setVoiceStatus}
+          />
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -296,6 +330,9 @@ export function ChatPanel({
             Send
           </button>
         </div>
+        {voiceStatus && (
+          <p className="mt-1.5 text-[11px] text-slate-500">{voiceStatus}</p>
+        )}
       </div>
     </div>
   );

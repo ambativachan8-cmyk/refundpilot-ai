@@ -418,6 +418,29 @@ and it's verifiable by running with no API key at all (identical decisions).
 
 ---
 
+## Voice pipeline (bonus) — zero-cost, browser-native
+
+The chat has an optional voice layer built entirely on **browser APIs** — no paid
+voice service, no API keys, no audio ever stored or uploaded:
+
+- **Speech-to-text** (`VoiceButton.tsx`): the 🎙 mic button uses the **Web Speech
+  API** (`SpeechRecognition`). Click → speak → the transcript lands in the chat
+  input, where you can **edit it before sending**. Visible states: idle, listening
+  (pulsing), transcript captured, mic-permission denied, no microphone, and
+  unsupported browser — all shown as a small inline hint, never an alert.
+- **Text-to-speech**: the 🔊 toggle uses `speechSynthesis` to read the **agent's
+  customer-facing reply only** (never logs or metadata). Turning it off, starting a
+  new conversation, or leaving the page cancels speech immediately, and a new reply
+  always cancels the previous one.
+- **Voice never bypasses policy.** A spoken request becomes the *same text* sent to
+  the *same* `/chat` endpoint — the LangGraph agent, CRM/order tools, deterministic
+  policy engine, and session state treat it identically to typing.
+- **Browser support:** Chrome/Edge recommended (Web Speech API requires it +
+  microphone permission). Unsupported browsers degrade gracefully to typing.
+- **Production upgrade path:** the same interface point could swap in OpenAI
+  Realtime, ElevenLabs, or LiveKit for streaming voice; browser-native APIs were
+  chosen here to keep the bonus zero-cost and key-free.
+
 ## Known prototype limitations
 
 - **Proof upload is simulated.** The "Attach proof" button sends a flag

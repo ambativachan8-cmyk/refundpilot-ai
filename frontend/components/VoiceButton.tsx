@@ -9,15 +9,42 @@ type SpeechRecognitionLike = {
   continuous: boolean;
   onresult: ((e: { results: { [i: number]: { [j: number]: { transcript: string } } }; resultIndex: number }) => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((e: { error?: string }) => void) | null;
   start: () => void;
   stop: () => void;
+  abort?: () => void;
 };
 
-export function VoiceButton({ onTranscript }: { onTranscript: (text: string) => void }) {
+const LISTENING_MSG = "Listening… speak now.";
+const ERROR_MESSAGES: Record<string, string> = {
+  "not-allowed": "Microphone permission was denied — allow mic access and try again.",
+  "service-not-allowed": "Microphone permission was denied — allow mic access and try again.",
+  "no-speech": "Didn't catch that — click the mic and try again.",
+  "audio-capture": "No microphone found — check your audio device.",
+  network: "Speech service unreachable — check your connection.",
+  aborted: "",
+};
+
+export function VoiceButton({
+  onTranscript,
+  onStatus,
+}: {
+  onTranscript: (text: string) => void;
+  /** Small inline status line (listening / unsupported / mic errors). */
+  onStatus?: (msg: string) => void;
+}) {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const recRef = useRef<SpeechRecognitionLike | null>(null);
+  // Latest callbacks + last status, so the recognizer is created exactly once.
+  const cbRef = useRef({ onTranscript, onStatus });
+  cbRef.current = { onTranscript, onStatus };
+  const lastStatusRef = useRef("");
+
+  const setStatus = (msg: string) => {
+    lastStatusRef.current = msg;
+    cbRef.current.onStatus?.(msg);
+  };
 
   useEffect(() => {
     const w = window as unknown as {
@@ -25,7 +52,10 @@ export function VoiceButton({ onTranscript }: { onTranscript: (text: string) => 
       webkitSpeechRecognition?: new () => SpeechRecognitionLike;
     };
     const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!Ctor) return;
+    if (!Ctor) {
+      setStatus("Voice input is not supported in this browser — please type your message.");
+      return;
+    }
     setSupported(true);
     const rec = new Ctor();
     rec.lang = "en-IN";
@@ -33,19 +63,36 @@ export function VoiceButton({ onTranscript }: { onTranscript: (text: string) => 
     rec.continuous = false;
     rec.onresult = (e) => {
       const text = e.results[e.resultIndex][0].transcript;
-      onTranscript(text);
+      cbRef.current.onTranscript(text);
+      setStatus("Transcript added — edit it if needed, then press Send.");
     };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
+    rec.onend = () => {
+      setListening(false);
+      // Clear a stale "Listening…" hint, but never wipe an error message.
+      if (lastStatusRef.current === LISTENING_MSG) setStatus("");
+    };
+    rec.onerror = (e) => {
+      setListening(false);
+      const msg = ERROR_MESSAGES[e?.error ?? ""] ?? "Voice input failed — please type your message.";
+      if (msg) setStatus(msg);
+    };
     recRef.current = rec;
-  }, [onTranscript]);
+    return () => {
+      try {
+        rec.abort?.();
+      } catch {
+        /* noop */
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!supported) {
     return (
       <button
         type="button"
         disabled
-        title="Voice input isn't supported in this browser. Try Chrome."
+        title="Voice input isn't supported in this browser. Try Chrome or Edge."
         className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-ink-800 text-slate-600"
       >
         <MicIcon />
@@ -59,12 +106,15 @@ export function VoiceButton({ onTranscript }: { onTranscript: (text: string) => 
     if (listening) {
       rec.stop();
       setListening(false);
+      setStatus("");
     } else {
       try {
         rec.start();
         setListening(true);
+        setStatus(LISTENING_MSG);
       } catch {
         setListening(false);
+        setStatus("Couldn't start the microphone — try again.");
       }
     }
   };

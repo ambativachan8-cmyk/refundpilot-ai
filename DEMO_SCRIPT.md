@@ -176,6 +176,24 @@ an **Escalated** decision and a `warning` log on the high-value rule.
   log). Every one of these replies came back in well under a second; the admin log
   shows a `timing` entry per request."
 
+## 4c. Voice demo — bonus (~0:45, Chrome/Edge + mic permission)
+
+> "As the bonus voice pipeline, the chat is fully voice-enabled using zero-cost
+> browser APIs — no paid voice service, no audio stored."
+
+1. Start a **New conversation**, click the **🎙 mic**, and say:
+   > **I want to return my headphones.**
+   → the transcript drops into the input (editable) — point at the "Transcript
+   added" hint — then press **Send**.
+2. Turn the **🔊 voice reply** toggle on, then ask:
+   > **what is the refund window?**
+   → the agent's answer is **read aloud**.
+3. Toggle 🔊 off mid-sentence → speech stops instantly.
+
+> "The key point: voice is just another interface. The spoken words become the same
+> text, hitting the same LangGraph agent and policy engine — voice can't bypass a
+> single policy check."
+
 ## 5. Admin logs walkthrough (~1:00)
 
 - Switch to the **/admin** tab.

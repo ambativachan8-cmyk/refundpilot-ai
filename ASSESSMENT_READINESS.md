@@ -74,7 +74,14 @@ Status as of the latest verified build. ✅ pass · ⚠️ partial/optional · �
 - ✅ Admin logs show reasoning / tool traces, incl. the intent-extraction step
   (`/admin`, live 3s polling, session filter).
 - ✅ Policy checks visible in the chat side panel and as log rows.
-- ⚠️ Voice (browser Web Speech API) present, optional, and degrades gracefully.
+- ✅ **Voice pipeline bonus** — zero-cost, browser-native. Speech-to-text via the
+  Web Speech API (mic button → editable transcript → same `/chat` flow) and
+  text-to-speech via `speechSynthesis` (reads only the agent reply; cancels on
+  toggle-off / new reply / new conversation / unmount). Inline states for
+  listening, mic-permission denied, and unsupported browsers; no audio stored, no
+  API keys. Voice cannot bypass policy — it feeds the same LangGraph agent.
+  Production upgrade path: OpenAI Realtime / ElevenLabs / LiveKit at the same
+  interface point; browser APIs chosen to keep the bonus cost- and key-free.
 
 ## E. Demo readiness
 - ✅ Clean approval scenario works (CUST-001 unused headphones → approved).
